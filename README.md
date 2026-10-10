@@ -1,0 +1,78 @@
+# StudyCompass AI：留学项目检索
+
+这是一个可本地运行的 FastAPI 留学项目检索应用。它从 SQLite 中检索**完全模拟**的留学项目，返回结构化结果、来源字段和规则匹配分，并支持自然语言推荐与基于当前结果的问答。首页采用已选定的 A 版界面，详情页沿用相同样式。管理导入和 Docker 属于后续阶段。
+
+## 环境要求与变量
+
+- Python 3.11+，SQLite 编译时须包含 FTS5。
+- 将 `.env.example` 复制为 `.env`。`DATABASE_URL` 默认指向项目目录内 `study_abroad.db`；目前仅支持 SQLite。
+- `ALLOWED_ORIGINS` 为以逗号分隔的精确前端来源。默认空值，不允许跨域浏览器调用。
+- `REQUEST_TIMEOUT_SECONDS` 默认 20 秒；SQLite 忙等待最多 5 秒。
+- `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 配置后端模型调用；`AI_BASE_URL` 应是兼容接口的 `/v1` 基地址。密钥不会发送到浏览器。
+- `AI_TIMEOUT_SECONDS` 默认 6 秒，单次模型请求超时或 HTTP 错误时自动降级。兼容服务须支持 Chat Completions 的 JSON object 响应格式；不支持时也会降级。
+
+## 本地运行
+
+在 `ai-study-abroad` 目录中运行。以下命令在 Windows CMD 和 PowerShell 都可用，无需先激活虚拟环境：
+
+```bat
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --no-access-log
+```
+
+如果要激活虚拟环境，CMD 使用 `.venv\Scripts\activate.bat`，PowerShell 使用 `.\.venv\Scripts\Activate.ps1`。macOS/Linux 则使用 `.venv/bin/python -m ...` 或 `source .venv/bin/activate`。启动时应用也会运行 Alembic 迁移；已由旧版启动逻辑创建的完整数据库会安全登记初始版本，不会清空数据。首次启动会将 `data/programs.json` 中的模拟记录装入空数据库；再次启动不会重复插入。访问 `http://127.0.0.1:8000/docs` 查看交互式 API 文档。
+
+打开 `http://127.0.0.1:8000/` 使用正式首页。输入留学需求后可选择“仅检索”或“智能推荐”；结构化筛选和排序会与当前推荐条件一起生效，不会被清空。点击项目标题进入详情页。窄屏下可展开筛选栏。B/C 早期方案仍可通过 `/preview/research` 和 `/preview/studio` 查看。
+
+当前页面由 Jinja2、Tailwind CSS、原生 JavaScript 和本地 `app/static/style.css` 渲染，启动时不依赖外部 JavaScript 或 CSS CDN。仓库已包含构建好的 `app/static/tailwind.css`，只运行 Python 即可展示页面。修改 Tailwind 类名后，使用 Node.js 运行 `npm ci` 和 `npm run css:build` 更新静态文件；开发时可用 `npm run css:watch`。构建时禁用 Tailwind Preflight，以保留现有页面的基础样式。
+
+三个页面的定位：
+
+| 方案 | 页面重点 | 适合的使用场景 |
+| --- | --- | --- |
+| A 清晰列表 | 自然语言输入与逐条来源阅读 | 首次了解留学项目的用户 |
+| B 检索工作台 | 紧凑筛选、排序与逐项比较 | 反复缩小申请名单的用户 |
+| C 探索卡片 | 卡片浏览与更轻的问答区域 | 移动端探索和初步发现 |
+
+布局与交互参考了 [Vercel Chatbot](https://github.com/vercel/chatbot) 的问答入口、[shadcn/ui](https://github.com/shadcn-ui/ui) 的组件组织，以及 [Meilisearch](https://github.com/meilisearch/meilisearch) 的检索产品思路。页面与代码为本项目重新实现，未复制这些项目的组件。
+
+若当前 Python 环境的 `venv`/`ensurepip` 已损坏，可在 PowerShell 中把依赖安装到项目内，临时运行：
+
+```powershell
+python -m pip install --target .deps -r requirements.txt
+$env:PYTHONPATH = '.deps'
+python -m alembic upgrade head
+python -m uvicorn app.main:app --no-access-log
+```
+
+## API 示例
+
+所有接口返回 `{ "code": 0, "message": "ok", "data": ..., "request_id": "..." }`。错误也使用相同结构，并设置对应 HTTP 状态码。
+
+```bash
+curl http://127.0.0.1:8000/api/health
+curl "http://127.0.0.1:8000/api/programs?q=computer%20science&country=%E8%8B%B1%E5%9B%BD&page=1&page_size=10"
+curl http://127.0.0.1:8000/api/programs/1
+curl -X POST http://127.0.0.1:8000/api/parse -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士 GPA 3.6/4 雅思7"}'
+curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士 GPA 3.6/4 雅思7","page_size":10}'
+curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士","filters":{"country":"香港","sort":"ranking"}}'
+curl -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"message":"第一个项目的学费是多少？","program_ids":[1]}'
+```
+
+搜索参数：`q`、`country`、`degree`、`discipline`、`gpa`、`ielts`、`budget`（人民币）、`intake`、`ranking_max`、`page`、`page_size`（最多 100）、`sort`。排序只接受 `relevance`、`deadline`、`updated_at`、`ranking`、`tuition_asc`、`tuition_desc`。学费排序按币种分组后按金额排列，不能作为跨币种价格比较。
+
+搜索词使用 SQLite FTS5；中文词使用参数化的子串匹配。结构化筛选在 SQLAlchemy 中参数化。GPA 在 4、5、100 分制之间仅做粗略归一，缺失要求和预算币种不一致会降低匹配分并给出提示，不会淘汰项目。匹配分仅用于检索排序，不代表录取概率。当前示例数据的排名也是模拟值。
+
+`POST /api/parse` 返回结构化条件。`POST /api/recommend` 先解析、检索和规则打分，再让 AI 从现有字段中选择推荐依据。服务端逐项校验项目 ID 和字段值，并用数据库值生成最终推荐文本和来源引用。AI 超时、限流、非法 JSON 或引用虚构数据时，响应保留规则检索结果，标记 `ai_available=false` 和 `AI 推荐暂不可用`。`POST /api/chat` 仅接受客户端选定的项目 ID，依据真实字段生成带 `source_url` 的回答；无依据时返回“根据当前检索结果无法确定”。AI 接口每 IP 每分钟最多 10 次，普通接口最多 60 次。
+
+## 测试
+
+```powershell
+python -m pytest tests -q
+```
+
+## 隐私与免责声明
+
+当前不保存搜索词、问答内容或客户端 IP；`QueryLog` 和 `ChatLog` 仍是预留表。启用 AI 后，查询和所选项目字段会发送给 `.env` 配置的模型服务商，请按该服务商的隐私条款使用。应用日志不记录请求参数或密钥。示例数据及 `example.org` 来源链接均为模拟内容，不能据此申请。项目数据仅供参考，不保证录取；费用、要求和截止日期应以真实项目官网为准。

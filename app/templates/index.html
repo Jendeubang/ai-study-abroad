@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="检索留学项目，查看申请要求与数据来源。">
+  <title>StudyCompass AI · 留学项目检索</title>
+  <link rel="stylesheet" href="/static/tailwind.css">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="theme-{{ style }}" data-style="{{ style }}">
+  <a class="skip-link" href="#main">跳至主要内容</a>
+  <div class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="StudyCompass AI 首页">
+        <span class="brand-mark shrink-0" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="14.5" stroke="currentColor"/><path d="M23.8 12.2 20.7 20.7l-8.5 3.1 3.1-8.5 8.5-3.1Z" fill="currentColor"/></svg></span>
+        <span>StudyCompass<span class="brand-ai"> AI</span></span>
+      </a>
+      {% if style != 'editorial' %}
+      <nav class="concept-switcher" aria-label="页面方案切换">
+        <a href="/" {% if style == 'editorial' %}aria-current="page"{% endif %}>A · 清晰列表</a>
+        <a href="/preview/research" {% if style == 'research' %}aria-current="page"{% endif %}>B · 检索工作台</a>
+        <a href="/preview/studio" {% if style == 'studio' %}aria-current="page"{% endif %}>C · 探索卡片</a>
+      </nav>
+      <span class="header-note">第三阶段 · 前端方案</span>
+      {% endif %}
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          {% if style == 'editorial' %}
+          <h1 id="hero-title">找到适合你的<em>留学项目。</em></h1>
+          <p>输入目标，查看项目条件与来源。</p>
+          {% elif style == 'research' %}
+          <h1 id="hero-title">让每一次筛选，<em>都有依据。</em></h1>
+          <p>一个适合逐项比较的申请研究工作台。匹配分是初筛参考，来源才是核对依据。</p>
+          {% else %}
+          <h1 id="hero-title">下一站，<em>从这里探索。</em></h1>
+          <p>写下你的计划，浏览可能适合的项目，再打开原始来源做自己的判断。</p>
+          {% endif %}
+          {% if style != 'editorial' %}<div class="hero-meta"><span class="live-dot" aria-hidden="true"></span> 当前展示完全模拟的院校与项目信息</div>{% endif %}
+        </div>
+        {% if style != 'editorial' %}
+        <div class="hero-aside" aria-hidden="true">
+          <span class="orbit orbit-one"></span><span class="orbit orbit-two"></span>
+          <span class="orbit-label orbit-label-one">检索</span><span class="orbit-label orbit-label-two">比较</span><span class="orbit-label orbit-label-three">核对来源</span>
+          <span class="orbit-core"><svg viewBox="0 0 48 48" fill="none"><path d="M24 4v40M4 24h40M10 10l28 28M38 10 10 38" stroke="currentColor" stroke-width="1.5"/><circle cx="24" cy="24" r="7" fill="currentColor"/></svg></span>
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="search-band" aria-labelledby="search-title">
+        <div class="search-heading"><h2 id="search-title">描述你的留学计划</h2>{% if style != 'editorial' %}<span>自然语言推荐会先解析条件，再检索数据库</span>{% endif %}</div>
+        <form id="search-form" novalidate>
+          <label class="sr-only" for="query">留学需求</label>
+          <textarea id="query" name="q" maxlength="1000" rows="3" placeholder="{% if style == 'editorial' %}例如：想申请英国计算机硕士，雅思 7 分，预算 40 万元{% else %}例如：本科 GPA 3.6/4，雅思 7，想申请英国或香港计算机硕士，预算约 40 万元……{% endif %}">{{ initial_query }}</textarea>
+          <div class="search-actions">
+            {% if style != 'editorial' %}
+            <button class="example-prompt" type="button" data-example="我本科 GPA 3.6/4，雅思 7，想申英国 CS 硕士，预算 40 万，求推荐">试试示例需求 <span aria-hidden="true">↗</span></button>
+            {% endif %}
+            <div class="action-buttons">
+              <button class="button button-subtle" type="button" id="plain-search">仅检索</button>
+              <button class="button button-primary" type="submit" id="recommend-button">{% if style == 'editorial' %}智能推荐{% else %}<span class="button-spark" aria-hidden="true">✦</span> AI 推荐{% endif %}</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <div class="workspace-layout">
+        <aside class="filter-panel" aria-labelledby="filter-title">
+          <div class="panel-heading"><h2 id="filter-title">{% if style == 'editorial' %}<button id="filter-toggle" class="filter-toggle" type="button" aria-controls="filter-form" aria-expanded="true">筛选<span class="filter-chevron" aria-hidden="true"></span></button>{% else %}筛选条件{% endif %}</h2><button id="clear-filters" type="button" class="text-button">清空</button></div>
+          <form id="filter-form">
+            <label>国家 / 地区<select name="country"><option value="">全部地区</option><option>英国</option><option>香港</option><option>新加坡</option><option>加拿大</option><option>澳大利亚</option><option>中国</option></select></label>
+            <label>学位<select name="degree"><option value="">全部学位</option><option>硕士</option><option>本科</option><option>博士</option></select></label>
+            <label>专业方向<input name="discipline" maxlength="150" placeholder="如：计算机科学"></label>
+            <div class="filter-pair"><label>GPA<input name="gpa" type="number" min="0" max="100" step="0.1" placeholder="3.6"></label><label>雅思<input name="ielts" type="number" min="0" max="9" step="0.5" placeholder="7.0"></label></div>
+            <label>学费预算 · 人民币<input name="budget" type="number" min="0" step="1000" placeholder="400000"></label>
+            <label>入学季<input name="intake" maxlength="100" placeholder="2027 Fall"></label>
+            <label>排名偏好<select name="ranking_max"><option value="">不限制</option><option value="50">前 50</option><option value="100">前 100</option><option value="200">前 200</option></select></label>
+            <button class="button button-filter" type="submit">应用筛选</button>
+          </form>
+          {% if style != 'editorial' %}<p class="filter-footnote">学费币种不同不会直接比较；GPA 不同分制仅作粗匹配。排名与分数均为模拟数据。</p>{% endif %}
+        </aside>
+
+        <section class="results-panel min-w-0 scroll-mt-6" aria-labelledby="results-title">
+          <div class="results-topline"><div>{% if style != 'editorial' %}<span class="section-caption">PROJECT DATABASE</span>{% endif %}<h2 id="results-title">{% if style == 'editorial' %}项目{% else %}匹配项目{% endif %} <span id="result-count" aria-live="polite">—</span></h2></div><label class="sort-label">排序<select id="sort"><option value="relevance">综合匹配</option><option value="deadline">截止日期</option><option value="ranking">模拟排名</option><option value="tuition_asc">学费从低到高</option><option value="tuition_desc">学费从高到低</option><option value="updated_at">最近更新</option></select></label></div>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
+          <div id="results" class="results-list" aria-live="polite"></div>
+          <div id="pagination" class="pagination" aria-label="结果分页"></div>
+        </section>
+
+        <aside class="assistant-panel" aria-labelledby="assistant-title">
+          <div class="assistant-heading"><span class="assistant-symbol" aria-hidden="true">✦</span><div><h2 id="assistant-title">项目问答</h2>{% if style != 'editorial' %}<p>基于当前页的检索结果</p>{% endif %}</div></div>
+          <div id="chat-messages" class="chat-messages" aria-live="polite">{% if style != 'editorial' %}<p class="chat-intro">你可以问：这些项目里，哪些雅思要求不高于 7 分？回答会标注项目来源。</p>{% endif %}</div>
+          <form id="chat-form"><label class="sr-only" for="chat-input">向项目问答提问</label><textarea id="chat-input" maxlength="1000" rows="3" placeholder="问问当前结果中的项目……"></textarea><button class="button button-primary" type="submit">发送问题 <span aria-hidden="true">↗</span></button></form>
+          {% if style != 'editorial' %}<p class="assistant-privacy">仅将问题和当前页项目传给后端。配置 AI 服务后，内容可能发送给该服务商。</p>{% endif %}
+        </aside>
+      </div>
+    </main>
+
+    <footer class="site-footer">{% if style == 'editorial' %}<p>所有项目均为模拟数据。条件分仅供初筛，不保证录取；请以真实项目官网为准。</p><p>隐私：查询仅用于本次检索；启用智能推荐时，内容可能发送给配置的模型服务商。</p>{% else %}<p>StudyCompass AI · 界面方案展示</p><p>示例数据完全模拟。数据仅供参考，不保证录取；费用、要求和截止日期以项目官网为准。</p>{% endif %}</footer>
+  </div>
+</body>
+</html>

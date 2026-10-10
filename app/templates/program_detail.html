@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ program.program_name }} · StudyCompass AI</title>
+  <link rel="stylesheet" href="/static/tailwind.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="theme-{{ style }} detail-body">
+  <a class="skip-link" href="#main">跳至主要内容</a>
+  <div class="app-shell">
+    <header class="site-header"><a class="brand" href="/"><span class="brand-mark shrink-0" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="14.5" stroke="currentColor"/><path d="M23.8 12.2 20.7 20.7l-8.5 3.1 3.1-8.5 8.5-3.1Z" fill="currentColor"/></svg></span><span>StudyCompass<span class="brand-ai"> AI</span></span></a><a class="back-link" href="{% if style == 'editorial' %}/{% else %}/preview/{{ style }}{% endif %}">← 返回检索</a></header>
+    <main id="main" class="detail-main">
+      {% if style != 'editorial' %}<p class="detail-breadcrumb">项目数据库 / {{ program.country }} / {{ program.degree }}</p>{% endif %}
+      <div class="detail-lead"><div><span class="detail-university">{{ program.university }}</span><h1>{{ program.program_name }}</h1><p>{{ program.country }}{% if program.city %} · {{ program.city }}{% endif %} · {{ program.discipline }}</p></div><span class="demo-stamp">模拟项目</span></div>
+      {% if deadline_expired or data_stale %}<div class="detail-alert" role="note">{% if deadline_expired %}<p>申请截止日期已过，请核对下一轮申请时间。</p>{% endif %}{% if data_stale %}<p>数据超过 180 天未更新，请以项目来源为准。</p>{% endif %}</div>{% endif %}
+      <div class="detail-grid"><div class="detail-content">
+        <section class="detail-section"><h2>项目概览</h2><p>{{ program.description or '暂无项目介绍，请查看来源。' }}</p></section>
+        <section class="detail-section"><h2>申请参考要求</h2><div class="fact-grid"><div><span>GPA 参考</span><strong>{% if program.gpa_min is not none %}{{ program.gpa_min }} / 4{% else %}信息缺失{% endif %}</strong></div><div><span>雅思参考</span><strong>{% if program.ielts_min is not none %}{{ program.ielts_min }}{% else %}信息缺失{% endif %}</strong></div><div><span>托福参考</span><strong>{% if program.toefl_min is not none %}{{ program.toefl_min }}{% else %}信息缺失{% endif %}</strong></div><div><span>GRE</span><strong>{% if program.gre_required is none %}信息缺失{% elif program.gre_required %}需要{% else %}未标明需要{% endif %}</strong></div></div></section>
+        <section class="detail-section"><h2>来源与更新</h2><p>最后更新：{{ program.updated_at.strftime('%Y-%m-%d') }}</p>{% if safe_external_url(program.source_url) %}<a class="source-link" href="{{ safe_external_url(program.source_url) }}" target="_blank" rel="noopener noreferrer">查看项目数据来源 ↗</a>{% else %}<p>暂无安全的来源链接</p>{% endif %}{% if style != 'editorial' %}<p class="source-note">本项目为演示数据，来源链接仅作界面示例。</p>{% endif %}</section>
+      </div><aside class="detail-facts"><h2>关键日期与费用</h2><dl><div><dt>学费</dt><dd>{% if program.tuition is not none %}{{ '{:,.0f}'.format(program.tuition) }} {{ program.currency or '' }}{% else %}信息缺失{% endif %}</dd></div><div><dt>申请截止</dt><dd>{{ program.deadline or '信息缺失' }}</dd></div><div><dt>入学季</dt><dd>{{ program.intake or '信息缺失' }}</dd></div><div><dt>学制</dt><dd>{{ program.duration or '信息缺失' }}</dd></div><div><dt>模拟排名</dt><dd>{{ program.university_record.ranking if program.university_record.ranking is not none else '信息缺失' }}</dd></div></dl>{% if safe_external_url(program.website) %}<a class="button button-primary external-button" href="{{ safe_external_url(program.website) }}" target="_blank" rel="noopener noreferrer">打开项目官网 ↗</a>{% endif %}</aside></div>
+      <div class="detail-disclaimer">数据仅供参考，不保证录取。此页全部院校、项目、排名及链接均为模拟内容；正式申请请以真实项目官网为准。</div>
+    </main>
+  </div>
+</body>
+</html>

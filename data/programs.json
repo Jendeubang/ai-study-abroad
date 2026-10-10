@@ -1,0 +1,74 @@
+[
+  {
+    "university": "Northbridge University (模拟)", "country": "英国", "city": "伦敦",
+    "program_name": "MSc Computer Science", "degree": "硕士", "discipline": "计算机科学",
+    "duration": "1 年", "tuition": 36000, "currency": "GBP", "intake": "2027 Fall",
+    "deadline": "2027-03-31", "gpa_min": 3.3, "ielts_min": 7.0, "toefl_min": 100,
+    "gre_required": false, "website": "https://example.org/northbridge/cs",
+    "source_url": "https://example.org/northbridge/cs", "description": "模拟项目：computer science, software systems and research methods.",
+    "tags": "CS,software,one-year", "ranking": 42
+  },
+  {
+    "university": "Westmoor University (模拟)", "country": "英国", "city": "曼彻斯特",
+    "program_name": "MSc Advanced Computer Science", "degree": "硕士", "discipline": "计算机科学",
+    "duration": "1 年", "tuition": 29500, "currency": "GBP", "intake": "2027 Fall",
+    "deadline": "2027-04-30", "gpa_min": 3.0, "ielts_min": 6.5, "toefl_min": 90,
+    "gre_required": null, "website": "https://example.org/westmoor/advanced-cs",
+    "source_url": "https://example.org/westmoor/advanced-cs", "description": "模拟项目：computer science with data and computing options.",
+    "tags": "CS,data", "ranking": 78
+  },
+  {
+    "university": "Harbourview University (模拟)", "country": "香港", "city": "香港",
+    "program_name": "MSc Computer Science", "degree": "硕士", "discipline": "计算机科学",
+    "duration": "1.5 年", "tuition": 240000, "currency": "HKD", "intake": "2027 Fall",
+    "deadline": "2027-01-15", "gpa_min": 3.2, "ielts_min": 6.5, "toefl_min": 85,
+    "gre_required": false, "website": "https://example.org/harbourview/cs",
+    "source_url": "https://example.org/harbourview/cs", "description": "模拟项目：computer science and applied AI foundations.",
+    "tags": "CS,AI", "ranking": 55
+  },
+  {
+    "university": "Lakeside Institute (模拟)", "country": "香港", "city": "香港",
+    "program_name": "MSc Data Science", "degree": "硕士", "discipline": "数据科学",
+    "duration": "1 年", "tuition": 210000, "currency": "HKD", "intake": "2027 Fall",
+    "deadline": "2027-02-20", "gpa_min": null, "ielts_min": 6.5, "toefl_min": null,
+    "gre_required": null, "website": "https://example.org/lakeside/data-science",
+    "source_url": "https://example.org/lakeside/data-science", "description": "模拟项目：data science, statistics and machine learning.",
+    "tags": "data,statistics", "ranking": null
+  },
+  {
+    "university": "Pacific Crest University (模拟)", "country": "新加坡", "city": "新加坡",
+    "program_name": "Master of Artificial Intelligence", "degree": "硕士", "discipline": "人工智能",
+    "duration": "2 年", "tuition": 48000, "currency": "SGD", "intake": "2027 Fall",
+    "deadline": "2027-03-01", "gpa_min": 3.4, "ielts_min": 7.0, "toefl_min": 100,
+    "gre_required": true, "website": "https://example.org/pacific-crest/ai",
+    "source_url": "https://example.org/pacific-crest/ai", "description": "模拟项目：artificial intelligence and computer vision.",
+    "tags": "AI,vision", "ranking": 65
+  },
+  {
+    "university": "Maple Vale University (模拟)", "country": "加拿大", "city": "多伦多",
+    "program_name": "MSc Software Engineering", "degree": "硕士", "discipline": "软件工程",
+    "duration": "2 年", "tuition": 38000, "currency": "CAD", "intake": "2027 Fall",
+    "deadline": "2027-01-31", "gpa_min": 3.0, "ielts_min": 6.5, "toefl_min": 88,
+    "gre_required": false, "website": "https://example.org/maple-vale/software",
+    "source_url": "https://example.org/maple-vale/software", "description": "模拟项目：software engineering and distributed systems.",
+    "tags": "software,engineering", "ranking": 120
+  },
+  {
+    "university": "Southbank College (模拟)", "country": "澳大利亚", "city": "悉尼",
+    "program_name": "Master of Information Technology", "degree": "硕士", "discipline": "信息技术",
+    "duration": "2 年", "tuition": 42000, "currency": "AUD", "intake": "2027 Spring",
+    "deadline": "2026-11-30", "gpa_min": null, "ielts_min": null, "toefl_min": null,
+    "gre_required": null, "website": "https://example.org/southbank/it",
+    "source_url": "https://example.org/southbank/it", "description": "模拟项目：information technology and cloud computing.",
+    "tags": "IT,cloud", "ranking": 95
+  },
+  {
+    "university": "Cedar Hill University (模拟)", "country": "中国", "city": "上海",
+    "program_name": "MSc Computer Science", "degree": "硕士", "discipline": "计算机科学",
+    "duration": "2 年", "tuition": 180000, "currency": "CNY", "intake": "2027 Fall",
+    "deadline": "2027-05-15", "gpa_min": 3.1, "ielts_min": 6.0, "toefl_min": 80,
+    "gre_required": false, "website": "https://example.org/cedar-hill/cs",
+    "source_url": "https://example.org/cedar-hill/cs", "description": "模拟项目：computer science and intelligent applications.",
+    "tags": "CS,applications", "ranking": null
+  }
+]
