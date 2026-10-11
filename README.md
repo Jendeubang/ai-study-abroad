@@ -1,6 +1,6 @@
 # StudyCompass AI：留学项目检索
 
-这是一个可本地运行的 FastAPI 留学项目检索应用。它从 SQLite 中检索**完全模拟**的留学项目，返回结构化结果、来源字段和规则匹配分，并支持自然语言推荐与基于当前结果的问答。首页采用已选定的 A 版界面，详情页沿用相同样式。管理导入和 Docker 属于后续阶段。
+这是一个可本地运行的 FastAPI 留学项目检索应用。网页目前从 SQLite 中检索**完全模拟**的留学项目，返回结构化结果、来源字段和规则匹配分，并支持自然语言推荐与基于当前结果的问答。另有独立脚本可核对少量官网招生要求；脚本结果不会自动进入网页数据库。首页采用已选定的 A 版界面，详情页沿用相同样式。管理导入和 Docker 属于后续阶段。
 
 ## 环境要求与变量
 
@@ -72,6 +72,22 @@ curl -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" 
 ```powershell
 python -m pytest tests -q
 ```
+
+## 官方招生要求采集脚本
+
+`scripts/crawl_official_requirements.py` 目前只支持两条预设的剑桥大学公开课程要求页：[高级计算机科学 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/cscsmpacs/requirements) 与 [科学计算 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/pcphmpscm/requirements)。采集前会检查该站点的 `robots.txt`，限定官网域名和页面、请求间隔至少 2 秒；遇到禁止抓取、403、跳转、网页结构变化或字段缺失会停止，不尝试绕过限制。脚本仅保存课程名、学历门槛、雅思及托福分数等明示事实，以及来源链接、抓取时间和页面哈希；不保存网页全文，也不访问申请系统、个人资料或登录区域。
+
+在项目目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.crawl_official_requirements --course all
+# 本地网络需要代理时，使用本机回环代理，例如：
+.\.venv\Scripts\python.exe -m scripts.crawl_official_requirements --course all --proxy http://127.0.0.1:3067
+```
+
+可将 `--course all` 改成 `--course cambridge-acs` 或 `--course cambridge-scientific-computing`；`--output 路径` 可指定输出文件。默认输出为 `data/official_requirements/latest.json`，已加入 `.gitignore`。代理只接受本机 HTTP 回环地址，不接受外部代理或代理凭据。脚本需要联网；无法读取 `robots.txt` 时会停止。
+
+这份采集结果供**本地非商业研究与人工核对**，不自动导入数据库或对外发布。剑桥大学[网站使用条款](https://www.cam.ac.uk/about-this-site/terms-and-conditions)对资料的复制和商业再利用设有限制；若用于生产服务、商业用途或扩大采集范围，应先核实授权与各站点最新条款。输出中的 `manual_review_required=true` 和 `subject_requirement_needs_review=true` 提醒核对专业背景等未提取条件。英国学位等级不被推断为 GPA；费用、截止日期和录取概率也不在本脚本的采集范围内。
 
 ## 隐私与免责声明
 
