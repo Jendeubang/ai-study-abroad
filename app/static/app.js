@@ -60,9 +60,11 @@
 
   function renderCard(item) {
     const article = node('article', 'program-card');
+    const official = item.data_origin === 'official_reviewed';
     const top = node('div', 'program-top');
     const titleGroup = node('div');
     titleGroup.append(node('p', 'program-university', item.university || '院校信息缺失'));
+    titleGroup.append(node('span', `source-badge ${official ? 'source-badge-official' : 'source-badge-demo'}`, official ? '官网已核对 · 招生要求' : '模拟项目'));
     const heading = node('h3');
     const detail = node('a', '', item.program_name || '项目名称缺失');
     detail.href = `/programs/${encodeURIComponent(item.id)}?style=${encodeURIComponent(style)}`;
@@ -82,9 +84,9 @@
     article.append(meta);
 
     const facts = node('div', 'program-facts');
-    addFact(facts, '学费', formatTuition(item));
-    addFact(facts, '申请截止', item.deadline || '信息缺失');
-    addFact(facts, '雅思参考', item.ielts_min == null ? '信息缺失' : item.ielts_min);
+    addFact(facts, '学费', official && item.tuition == null ? '未采集' : formatTuition(item));
+    addFact(facts, '申请截止', item.deadline || (official ? '未采集' : '信息缺失'));
+    addFact(facts, official ? '雅思要求' : '雅思参考', item.ielts_min == null ? '信息缺失' : item.ielts_min);
     article.append(facts);
 
     if (style !== 'editorial' || item.recommendation) {
@@ -98,10 +100,11 @@
     }
 
     const footer = node('div', 'program-footer');
-    footer.append(node('span', '', `更新于 ${String(item.updated_at || '').slice(0, 10) || '未知'}`));
+    const updated = String((official ? item.source_retrieved_at : item.updated_at) || '').slice(0, 10) || '未知';
+    footer.append(node('span', '', official ? `数据更新于 ${updated}（官网采集） · 人工核对 ${String(item.reviewed_at || '').slice(0, 10) || '未知'}` : `模拟数据更新于 ${updated}`));
     const source = safeUrl(item.source_url);
     if (source) {
-      const link = node('a', '', '查看数据来源 ↗');
+      const link = node('a', '', official ? '查看大学官网 ↗' : '模拟来源 ↗');
       link.href = source;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';

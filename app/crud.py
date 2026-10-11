@@ -21,8 +21,13 @@ def find_programs(
     degree: str | None = None,
     discipline: str | None = None,
     intake: str | None = None,
+    source_type: str = "all",
 ) -> list[Program]:
     statement = select(Program).options(joinedload(Program.university_record))
+    if source_type == "official":
+        statement = statement.where(Program.data_origin == "official_reviewed")
+    elif source_type == "demo":
+        statement = statement.where(Program.data_origin == "demo")
     if country:
         statement = statement.where(Program.country == country)
     if countries:

@@ -40,7 +40,7 @@
           <h1 id="hero-title">下一站，<em>从这里探索。</em></h1>
           <p>写下你的计划，浏览可能适合的项目，再打开原始来源做自己的判断。</p>
           {% endif %}
-          {% if style != 'editorial' %}<div class="hero-meta"><span class="live-dot" aria-hidden="true"></span> 当前展示完全模拟的院校与项目信息</div>{% endif %}
+          {% if style != 'editorial' %}<div class="hero-meta"><span class="live-dot" aria-hidden="true"></span> 项目含模拟数据；官网招生要求须经人工核对后才会显示</div>{% endif %}
         </div>
         {% if style != 'editorial' %}
         <div class="hero-aside" aria-hidden="true">
@@ -72,6 +72,7 @@
         <aside class="filter-panel" aria-labelledby="filter-title">
           <div class="panel-heading"><h2 id="filter-title">{% if style == 'editorial' %}<button id="filter-toggle" class="filter-toggle" type="button" aria-controls="filter-form" aria-expanded="true">筛选<span class="filter-chevron" aria-hidden="true"></span></button>{% else %}筛选条件{% endif %}</h2><button id="clear-filters" type="button" class="text-button">清空</button></div>
           <form id="filter-form">
+            <label>数据来源<select name="source_type"><option value="all">全部项目</option><option value="official">官网已核对</option><option value="demo">模拟项目</option></select></label>
             <label>国家 / 地区<select name="country"><option value="">全部地区</option><option>英国</option><option>香港</option><option>新加坡</option><option>加拿大</option><option>澳大利亚</option><option>中国</option></select></label>
             <label>学位<select name="degree"><option value="">全部学位</option><option>硕士</option><option>本科</option><option>博士</option></select></label>
             <label>专业方向<input name="discipline" maxlength="150" placeholder="如：计算机科学"></label>
@@ -81,11 +82,11 @@
             <label>排名偏好<select name="ranking_max"><option value="">不限制</option><option value="50">前 50</option><option value="100">前 100</option><option value="200">前 200</option></select></label>
             <button class="button button-filter" type="submit">应用筛选</button>
           </form>
-          {% if style != 'editorial' %}<p class="filter-footnote">学费币种不同不会直接比较；GPA 不同分制仅作粗匹配。排名与分数均为模拟数据。</p>{% endif %}
+          {% if style != 'editorial' %}<p class="filter-footnote">官网已核对项目目前仅含部分招生要求。模拟项目的排名与费用不可作为申请依据。</p>{% endif %}
         </aside>
 
         <section class="results-panel min-w-0 scroll-mt-6" aria-labelledby="results-title">
-          <div class="results-topline"><div>{% if style != 'editorial' %}<span class="section-caption">PROJECT DATABASE</span>{% endif %}<h2 id="results-title">{% if style == 'editorial' %}项目{% else %}匹配项目{% endif %} <span id="result-count" aria-live="polite">—</span></h2></div><label class="sort-label">排序<select id="sort"><option value="relevance">综合匹配</option><option value="deadline">截止日期</option><option value="ranking">模拟排名</option><option value="tuition_asc">学费从低到高</option><option value="tuition_desc">学费从高到低</option><option value="updated_at">最近更新</option></select></label></div>
+          <div class="results-topline"><div>{% if style != 'editorial' %}<span class="section-caption">PROJECT DATABASE</span>{% endif %}<h2 id="results-title">{% if style == 'editorial' %}项目{% else %}匹配项目{% endif %} <span id="result-count" aria-live="polite">—</span></h2></div><label class="sort-label">排序<select id="sort"><option value="relevance">综合匹配</option><option value="deadline">截止日期</option><option value="ranking">排名（仅模拟）</option><option value="tuition_asc">学费从低到高</option><option value="tuition_desc">学费从高到低</option><option value="updated_at">最近更新</option></select></label></div>
           <div id="status" class="status" role="status" aria-live="polite"></div>
           <div id="results" class="results-list" aria-live="polite"></div>
           <div id="pagination" class="pagination" aria-label="结果分页"></div>
@@ -100,7 +101,7 @@
       </div>
     </main>
 
-    <footer class="site-footer">{% if style == 'editorial' %}<p>所有项目均为模拟数据。条件分仅供初筛，不保证录取；请以真实项目官网为准。</p><p>隐私：查询仅用于本次检索；启用智能推荐时，内容可能发送给配置的模型服务商。</p>{% else %}<p>StudyCompass AI · 界面方案展示</p><p>示例数据完全模拟。数据仅供参考，不保证录取；费用、要求和截止日期以项目官网为准。</p>{% endif %}</footer>
+    <footer class="site-footer">{% if style == 'editorial' %}<p>模拟数据与官网已核对的招生要求会逐条标明。条件分不代表录取概率，数据仅供参考，不保证录取；正式申请以官网最新信息为准。</p><p>隐私：查询仅用于本次检索；启用智能推荐时，内容可能发送给配置的模型服务商。</p>{% else %}<p>StudyCompass AI · 界面方案展示</p><p>数据含模拟数据及人工核对的官网招生要求；请逐条查看来源。数据仅供参考，不保证录取。</p>{% endif %}</footer>
   </div>
 </body>
 </html>

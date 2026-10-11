@@ -34,7 +34,20 @@ def upgrade() -> None:
                 column.name: (str(column.type), column.nullable, column.primary_key)
                 for column in table.columns
             }
-            if actual_columns != expected_columns:
+            # This pre-Alembic bootstrap may contain either the original columns
+            # or a full schema made by the current model before stamping.
+            if name == "programs":
+                later_columns = {
+                    "data_origin", "source_id", "source_sha256", "source_retrieved_at",
+                    "reviewed_at", "academic_standard", "language_details_json",
+                }
+                legacy_columns = {
+                    key: value for key, value in expected_columns.items() if key not in later_columns
+                }
+                valid_columns = (expected_columns, legacy_columns)
+            else:
+                valid_columns = (expected_columns,)
+            if actual_columns not in valid_columns:
                 raise RuntimeError(f"已有项目表 {name} 的字段与初始版本不一致，已停止迁移")
             actual_unique = {
                 tuple(sorted(constraint["column_names"]))

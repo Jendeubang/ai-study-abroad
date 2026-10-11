@@ -30,6 +30,7 @@ def list_programs(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     sort: SortKey = "relevance",
+    source_type: Literal["all", "official", "demo"] = "all",
 ):
     try:
         q = validate_search_text(q)
@@ -39,6 +40,7 @@ def list_programs(
         q=q, country=country, degree=degree, discipline=discipline,
         gpa=gpa, ielts=ielts, budget=budget, intake=intake,
         ranking_max=ranking_max, page=page, page_size=page_size, sort=sort,
+        source_type=source_type,
     )
     return {"code": 0, "message": "ok", "data": search_programs(db, criteria), "request_id": request.state.request_id}
 

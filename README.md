@@ -1,6 +1,6 @@
 # StudyCompass AI：留学项目检索
 
-这是一个可本地运行的 FastAPI 留学项目检索应用。网页目前从 SQLite 中检索**完全模拟**的留学项目，返回结构化结果、来源字段和规则匹配分，并支持自然语言推荐与基于当前结果的问答。另有独立脚本可核对少量官网招生要求；脚本结果不会自动进入网页数据库。首页采用已选定的 A 版界面，详情页沿用相同样式。管理导入和 Docker 属于后续阶段。
+这是一个可本地运行的 FastAPI 留学项目检索应用。数据库初始项目为**完全模拟**的数据；经过人工核对后，也可将少量官网招生要求摘要导入本地检索数据库。每条结果显示“模拟项目”或“官网已核对 · 招生要求”，并附来源和数据更新时间。应用支持自然语言推荐与基于当前结果的问答。首页采用已选定的 A 版界面，详情页沿用相同样式。公开管理 API 和 Docker 属于后续阶段。
 
 ## 环境要求与变量
 
@@ -61,7 +61,7 @@ curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/j
 curl -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"message":"第一个项目的学费是多少？","program_ids":[1]}'
 ```
 
-搜索参数：`q`、`country`、`degree`、`discipline`、`gpa`、`ielts`、`budget`（人民币）、`intake`、`ranking_max`、`page`、`page_size`（最多 100）、`sort`。排序只接受 `relevance`、`deadline`、`updated_at`、`ranking`、`tuition_asc`、`tuition_desc`。学费排序按币种分组后按金额排列，不能作为跨币种价格比较。
+搜索参数：`q`、`country`、`degree`、`discipline`、`gpa`、`ielts`、`budget`（人民币）、`intake`、`ranking_max`、`source_type`（`all`、`official`、`demo`）、`page`、`page_size`（最多 100）、`sort`。排序只接受 `relevance`、`deadline`、`updated_at`、`ranking`、`tuition_asc`、`tuition_desc`。学费排序按币种分组后按金额排列，不能作为跨币种价格比较。
 
 搜索词使用 SQLite FTS5；中文词使用参数化的子串匹配。结构化筛选在 SQLAlchemy 中参数化。GPA 在 4、5、100 分制之间仅做粗略归一，缺失要求和预算币种不一致会降低匹配分并给出提示，不会淘汰项目。匹配分仅用于检索排序，不代表录取概率。当前示例数据的排名也是模拟值。
 
@@ -87,8 +87,26 @@ python -m pytest tests -q
 
 可将 `--course all` 改成 `--course cambridge-acs` 或 `--course cambridge-scientific-computing`；`--output 路径` 可指定输出文件。默认输出为 `data/official_requirements/latest.json`，已加入 `.gitignore`。代理只接受本机 HTTP 回环地址，不接受外部代理或代理凭据。脚本需要联网；无法读取 `robots.txt` 时会停止。
 
-这份采集结果供**本地非商业研究与人工核对**，不自动导入数据库或对外发布。剑桥大学[网站使用条款](https://www.cam.ac.uk/about-this-site/terms-and-conditions)对资料的复制和商业再利用设有限制；若用于生产服务、商业用途或扩大采集范围，应先核实授权与各站点最新条款。输出中的 `manual_review_required=true` 和 `subject_requirement_needs_review=true` 提醒核对专业背景等未提取条件。英国学位等级不被推断为 GPA；费用、截止日期和录取概率也不在本脚本的采集范围内。
+这份采集结果供**本地非商业研究与人工核对**，爬虫不会自动导入数据库。剑桥大学[网站使用条款](https://www.cam.ac.uk/about-this-site/terms-and-conditions)对资料的复制和商业再利用设有限制；若用于公开网站、生产服务、商业用途或扩大采集范围，应先核实并取得所需授权。输出中的 `manual_review_required=true` 和 `subject_requirement_needs_review=true` 提醒核对专业背景等未提取条件。英国学位等级不被推断为 GPA；费用、截止日期和录取概率也不在本脚本的采集范围内。
+
+### 核对后导入本地检索库
+
+先运行上述采集命令，再生成**默认不批准**的核对清单：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.review_and_import prepare
+```
+
+打开 `data/official_requirements/review.json`，对每条记录点击 `source_url` 核对课程名、学历等级和各项语言成绩，并检查网站使用条款。确认只在允许的本地非商业范围使用后，将顶层 `rights_confirmed` 改为 `true`；只把确认无误的记录的 `approved` 改为 `true`，并为每条填写至少 8 字的 `review_note`。未批准的记录不会导入。清单绑定采集快照的摘要；采集内容发生变化后，须生成新的清单，不能沿用旧批准。默认清单已存在时，`prepare` 不会覆盖它；可用 `--review 另一文件.json` 保存新清单。
+
+核对完成后执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.review_and_import import
+```
+
+脚本使用与网页相同的 `.env` `DATABASE_URL`。它会自动运行 Alembic 迁移，按课程来源 ID 更新同一条官网项目；同一网页快照重复导入不会生成重复项目或刷新核对时间。导入后刷新首页，在“数据来源”中选择“官网已核对”；卡片和详情页会显示大学官网链接、官网采集时间及人工核对时间。**“数据更新时间”指最近一次采集，不是官网页面的发布日期。** 未采集的学费、截止日期、排名等继续显示为缺失，不会从模拟项目填充。采集 JSON 和核对清单均被 Git 忽略，不会随代码上传。
 
 ## 隐私与免责声明
 
-当前不保存搜索词、问答内容或客户端 IP；`QueryLog` 和 `ChatLog` 仍是预留表。启用 AI 后，查询和所选项目字段会发送给 `.env` 配置的模型服务商，请按该服务商的隐私条款使用。应用日志不记录请求参数或密钥。示例数据及 `example.org` 来源链接均为模拟内容，不能据此申请。项目数据仅供参考，不保证录取；费用、要求和截止日期应以真实项目官网为准。
+当前不保存搜索词、问答内容或客户端 IP；`QueryLog` 和 `ChatLog` 仍是预留表。启用 AI 后，查询和所选项目字段会发送给 `.env` 配置的模型服务商，请按该服务商的隐私条款使用。应用日志不记录请求参数或密钥。初始示例数据及 `example.org` 来源链接均为模拟内容，不能据此申请。人工核对的官网记录仅覆盖明确采集的部分招生要求；项目数据仅供参考，不保证录取，费用、要求和截止日期应以真实项目官网为准。

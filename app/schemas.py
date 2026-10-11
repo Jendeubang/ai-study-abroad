@@ -37,6 +37,11 @@ class ProgramRead(BaseModel):
     description: str | None
     tags: str | None
     updated_at: datetime
+    data_origin: Literal["demo", "official_reviewed"]
+    source_retrieved_at: datetime | None
+    reviewed_at: datetime | None
+    academic_standard: str | None
+    language_details: dict | None
 
 
 class ProgramListItem(ProgramRead):
@@ -117,6 +122,7 @@ class RecommendationFilters(BaseModel):
     budget: float | None = Field(default=None, ge=0, le=100_000_000)
     intake: str | None = Field(default=None, min_length=1, max_length=100)
     ranking_max: int | None = Field(default=None, ge=1, le=10_000)
+    source_type: Literal["all", "official", "demo"] = "all"
     sort: Literal["relevance", "deadline", "updated_at", "ranking", "tuition_asc", "tuition_desc"] = "relevance"
 
 

@@ -41,7 +41,7 @@ def test_existing_bootstrap_database_can_be_migrated_without_losing_programs(tmp
     )
 
     assert result.returncode == 0, result.stderr
-    assert migration_version(database) == "0001_initial"
+    assert migration_version(database) == "0002_reviewed_official"
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) FROM programs").fetchone()[0] == before
 
@@ -52,7 +52,35 @@ def test_application_startup_migrates_a_new_database(tmp_path):
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
 
-    assert migration_version(database) == "0001_initial"
+    assert migration_version(database) == "0002_reviewed_official"
+
+
+def test_upgrade_from_initial_version_preserves_existing_rows(tmp_path):
+    database = tmp_path / "v1.db"
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = f"sqlite:///{database.as_posix()}"
+    initial = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "0001_initial"],
+        cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30,
+    )
+    assert initial.returncode == 0, initial.stderr
+    with sqlite3.connect(database) as connection:
+        connection.execute("INSERT INTO universities (id, name, country) VALUES (1, 'Old U', '英国')")
+        connection.execute(
+            "INSERT INTO programs (id, university_id, university, country, program_name, degree, "
+            "discipline, source_url, updated_at) VALUES "
+            "(1, 1, 'Old U', '英国', 'Old course', '硕士', '计算机科学', "
+            "'https://example.org/old', '2026-10-01')"
+        )
+    upgraded = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30,
+    )
+    assert upgraded.returncode == 0, upgraded.stderr
+    with sqlite3.connect(database) as connection:
+        row = connection.execute("SELECT program_name, data_origin FROM programs WHERE id = 1").fetchone()
+    assert row == ("Old course", "demo")
+    assert migration_version(database) == "0002_reviewed_official"
 
 
 def test_incomplete_existing_schema_is_not_stamped(tmp_path):

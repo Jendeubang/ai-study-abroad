@@ -90,7 +90,7 @@ def apply_recommendation_filters(
     criteria = criteria_from_parsed(effective_parsed, page=page, page_size=page_size)
     if filters.ranking_max is not None:
         criteria = replace(criteria, ranking_max=filters.ranking_max)
-    return effective_parsed, replace(criteria, sort=filters.sort)
+    return effective_parsed, replace(criteria, sort=filters.sort, source_type=filters.source_type)
 
 
 def verified_fact(item: dict, fact: Fact) -> bool:

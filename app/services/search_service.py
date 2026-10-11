@@ -25,6 +25,7 @@ class SearchCriteria:
     page: int = 1
     page_size: int = 20
     sort: str = "relevance"
+    source_type: str = "all"
 
 
 def validate_search_text(q: str | None) -> str | None:
@@ -104,6 +105,7 @@ def search_programs(session: Session, criteria: SearchCriteria) -> dict:
         degree=criteria.degree,
         discipline=criteria.discipline,
         intake=criteria.intake,
+        source_type=criteria.source_type,
     )
     scored = [(program, *_score(program, criteria)) for program in programs]
     if criteria.sort == "deadline":
@@ -115,7 +117,9 @@ def search_programs(session: Session, criteria: SearchCriteria) -> dict:
     elif criteria.sort in ("tuition_asc", "tuition_desc"):
         scored.sort(key=lambda row: (row[0].currency or "ZZZ", row[0].tuition is None, row[0].tuition or 0, row[0].id), reverse=criteria.sort == "tuition_desc")
     else:
-        scored.sort(key=lambda row: (-row[1], row[0].id))
+        scored.sort(key=lambda row: (
+            -row[1], row[0].data_origin != "official_reviewed", row[0].id,
+        ))
     start = (criteria.page - 1) * criteria.page_size
     items = []
     for program, score, notes in scored[start:start + criteria.page_size]:

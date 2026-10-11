@@ -1,6 +1,7 @@
+import json
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -26,6 +27,7 @@ class University(Base):
 
 class Program(Base):
     __tablename__ = "programs"
+    __table_args__ = (Index("ix_programs_source_id", "source_id", unique=True),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     university_id: Mapped[int] = mapped_column(ForeignKey("universities.id"), nullable=False)
@@ -49,8 +51,19 @@ class Program(Base):
     description: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    data_origin: Mapped[str] = mapped_column(String(30), default="demo", server_default="demo", nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(80))
+    source_sha256: Mapped[str | None] = mapped_column(String(64))
+    source_retrieved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    academic_standard: Mapped[str | None] = mapped_column(String(120))
+    language_details_json: Mapped[str | None] = mapped_column(Text)
     university_record: Mapped[University] = relationship(back_populates="programs")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="program")
+
+    @property
+    def language_details(self) -> dict | None:
+        return json.loads(self.language_details_json) if self.language_details_json else None
 
 
 class QueryLog(Base):
