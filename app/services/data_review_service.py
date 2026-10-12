@@ -12,10 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
-    ApplicationRound, EvidenceFact, Program, ReviewCandidate, ReviewDecision, SourceDefinition,
-    SourceCheck, SourcePermission,
+    ApplicationRound, EvidenceFact, Program, ProgramCandidate, ReviewCandidate,
+    ReviewDecision, SourceDefinition, SourceCheck, SourcePermission, University,
 )
-from app.sources.catalog import seed_source_catalog
+from app.sources.catalog import permission_allows, seed_source_catalog
 from app.services.additional_import_service import AdditionalReviewError, _approved_records, _records, _time
 from scripts.crawl_additional_programs import SOURCES
 
@@ -429,3 +429,151 @@ def review_alerts(session: Session, program: Program) -> list[str]:
     if reviewed_dates and min(_utc(value) for value in reviewed_dates) < datetime.now(timezone.utc) - timedelta(days=90):
         alerts.append("核对超过 90 天")
     return alerts
+
+
+def decide_program_candidate(
+    session: Session, candidate_id: int, *, decision: str,
+    reviewer: str, note: str, purpose: str = "local_non_commercial_research",
+) -> ProgramCandidate:
+    if decision not in {"approved", "rejected"}:
+        raise ReviewWorkflowError("审核决定无效")
+    if not 1 <= len(reviewer.strip()) <= 100 or not 8 <= len(note.strip()) <= 500:
+        raise ReviewWorkflowError("请填写核查人和至少 8 字的审核说明")
+    candidate = session.get(ProgramCandidate, candidate_id)
+    if candidate is None or candidate.status != "pending":
+        raise ReviewWorkflowError("待审核新项目不存在或已处理")
+    observed = datetime.now(timezone.utc)
+    try:
+        if decision == "approved":
+            retrieved = _utc(candidate.retrieved_at)
+            if retrieved > observed + timedelta(minutes=5) or retrieved < observed - timedelta(days=90):
+                raise ReviewWorkflowError("新项目证据已过期，请重新采集后再批准")
+            source_ids = candidate.source_ids
+            snapshots = candidate.source_snapshots
+            if not source_ids or set(source_ids) != set(snapshots):
+                raise ReviewWorkflowError("来源快照不完整")
+            sources: dict[str, SourceDefinition] = {}
+            for source_id in source_ids:
+                source = session.get(SourceDefinition, source_id)
+                if source is None or not permission_allows(session, source, purpose=purpose, now=observed):
+                    raise ReviewWorkflowError("来源权限缺失、过期、停用或未覆盖本次用途")
+                sources[source_id] = source
+            for fact in candidate.facts:
+                if (
+                    fact.get("source_id") not in sources
+                    or fact.get("source_url") != sources[fact["source_id"]].url
+                    or fact.get("source_sha256") != snapshots[fact["source_id"]]
+                    or fact.get("field_name") not in sources[fact["source_id"]].allowed_fields
+                    or not 1 <= len(str(fact.get("evidence_excerpt", "")).strip()) <= 500
+                ):
+                    raise ReviewWorkflowError("字段证据与来源快照不匹配")
+            existing = session.scalar(select(Program.id).where(Program.source_id.in_(source_ids)).limit(1))
+            if existing is not None:
+                raise ReviewWorkflowError("该官网项目已导入，请走已有项目变化复核流程")
+            metadata = candidate.program_metadata
+            university = session.scalar(select(University).where(
+                University.name == metadata["university"],
+                University.country == metadata["country"],
+            ))
+            if university is None:
+                university = University(name=metadata["university"], country=metadata["country"])
+                session.add(university)
+                session.flush()
+            primary_source = sources[source_ids[0]]
+            program = Program(
+                university_id=university.id, university=metadata["university"],
+                country=metadata["country"], city=metadata.get("city"),
+                program_name=metadata["program_name"], degree=metadata["degree"],
+                discipline=metadata["discipline"], source_id=source_ids[0],
+                source_url=primary_source.url, website=primary_source.url,
+                source_sha256=candidate.snapshot_sha256,
+                source_retrieved_at=retrieved, reviewed_at=observed,
+                updated_at=retrieved, data_origin="official_reviewed",
+            )
+            session.add(program)
+            session.flush()
+            scalar_values: dict[str, set[str]] = {}
+            for fact in candidate.facts:
+                field_name = fact["field_name"]
+                value = fact["value"]
+                scope = fact["scope"]
+                source = sources[fact["source_id"]]
+                if field_name == "application_rounds":
+                    intake = value.get("intake") or scope.get("intake")
+                    round_label = value.get("round_label")
+                    try:
+                        opens_on = date.fromisoformat(value["opens_on"]) if value.get("opens_on") else None
+                        deadline_on = date.fromisoformat(value["deadline_on"]) if value.get("deadline_on") else None
+                    except (KeyError, ValueError) as exc:
+                        raise ReviewWorkflowError("申请轮次日期无效") from exc
+                    if not intake or not round_label or (not opens_on and not deadline_on):
+                        raise ReviewWorkflowError("申请轮次缺少入学季、轮次或日期")
+                    session.add(ApplicationRound(
+                        program_id=program.id, intake=intake, round_label=round_label,
+                        opens_on=opens_on, deadline_on=deadline_on,
+                        evidence_excerpt=fact["evidence_excerpt"], source_url=fact["source_url"],
+                        source_sha256=fact["source_sha256"], retrieved_at=retrieved,
+                        reviewed_at=observed, reviewer=reviewer.strip(), active=True,
+                    ))
+                    continue
+                session.add(EvidenceFact(
+                    program_id=program.id, field_name=field_name,
+                    value_json=_json(value), scope_json=_json(scope),
+                    evidence_excerpt=fact["evidence_excerpt"], source_url=fact["source_url"],
+                    source_sha256=fact["source_sha256"], retrieved_at=retrieved,
+                    reviewed_at=observed, reviewer=reviewer.strip(), active=True,
+                ))
+                scalar_values.setdefault(field_name, set()).add(_json(value))
+            for field_name, values in scalar_values.items():
+                if len(values) != 1:
+                    continue
+                value = json.loads(next(iter(values)))
+                if field_name == "tuition":
+                    program.tuition = float(value["amount"])
+                    program.currency = value["currency"]
+                elif field_name == "intake":
+                    program.intake = value["value"]
+                elif field_name == "ielts_min":
+                    program.ielts_min = float(value["value"])
+                elif field_name == "toefl_min":
+                    program.toefl_min = float(value["value"])
+                elif field_name == "duration":
+                    program.duration = value["value"]
+                elif field_name == "academic_standard":
+                    program.academic_standard = value.get("text", value.get("value"))
+                elif field_name == "language_details":
+                    program.language_details_json = _json(value)
+            for source_id, digest in snapshots.items():
+                session.query(SourceCheck).filter(
+                    SourceCheck.source_id == source_id,
+                    SourceCheck.source_sha256 == digest,
+                    SourceCheck.program_id.is_(None),
+                ).update({SourceCheck.program_id: program.id}, synchronize_session=False)
+        candidate.status = decision
+        candidate.reviewed_at = observed
+        candidate.reviewer = reviewer.strip()
+        candidate.review_note = note.strip()
+        session.commit()
+        session.refresh(candidate)
+    except Exception:
+        session.rollback()
+        raise
+    return candidate
+
+
+def approve_program_candidate(
+    session: Session, candidate_id: int, *, reviewer: str, note: str,
+    purpose: str = "local_non_commercial_research",
+) -> ProgramCandidate:
+    return decide_program_candidate(
+        session, candidate_id, decision="approved", reviewer=reviewer,
+        note=note, purpose=purpose,
+    )
+
+
+def reject_program_candidate(
+    session: Session, candidate_id: int, *, reviewer: str, note: str,
+) -> ProgramCandidate:
+    return decide_program_candidate(
+        session, candidate_id, decision="rejected", reviewer=reviewer, note=note,
+    )

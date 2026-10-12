@@ -178,6 +178,68 @@ class ApplicationRound(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class SyncRun(Base):
+    __tablename__ = "sync_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(30), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    eligible_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    checked_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    changed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source_statuses_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+
+    @property
+    def source_statuses(self) -> list[dict]:
+        return json.loads(self.source_statuses_json)
+
+
+class ProgramCandidate(Base):
+    """Initial programme facts held for review before Program creation."""
+
+    __tablename__ = "program_candidates"
+    __table_args__ = (
+        Index("ix_program_candidates_status", "status"),
+        Index("ix_program_candidates_fingerprint", "fingerprint", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    programme_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    source_snapshots_json: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False)
+    facts_json: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewer: Mapped[str | None] = mapped_column(String(100))
+    review_note: Mapped[str | None] = mapped_column(String(500))
+
+    @property
+    def source_ids(self) -> list[str]:
+        return json.loads(self.source_ids_json)
+
+    @property
+    def source_snapshots(self) -> dict[str, str]:
+        return json.loads(self.source_snapshots_json)
+
+    @property
+    def program_metadata(self) -> dict:
+        return json.loads(self.metadata_json)
+
+    @property
+    def facts(self) -> list[dict]:
+        return json.loads(self.facts_json)
+
+
 class SourceCheck(Base):
     __tablename__ = "source_checks"
     __table_args__ = (Index("ix_source_checks_source_time", "source_id", "checked_at"),)
@@ -190,6 +252,7 @@ class SourceCheck(Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[str | None] = mapped_column(String(300))
+    sync_run_id: Mapped[int | None] = mapped_column(ForeignKey("sync_runs.id"))
 
 
 class ReviewCandidate(Base):

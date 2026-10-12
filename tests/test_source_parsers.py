@@ -37,7 +37,8 @@ def test_hku_application_page_extracts_only_explicit_intake_and_round():
     assert [(fact.field_name, fact.value) for fact in record.facts] == [
         ("intake", {"value": "2027 Fall"}),
         ("application_rounds", {
-            "round_label": "Round 1", "opens_on": "2026-10-01", "deadline_on": "2026-12-01",
+            "intake": "2027 Fall", "round_label": "Round 1",
+            "opens_on": "2026-10-01", "deadline_on": "2026-12-01",
         }),
     ]
     assert all(fact.source_url.startswith("https://master.cds.hku.hk/") for fact in record.facts)
