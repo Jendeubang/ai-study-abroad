@@ -19,6 +19,7 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup, Tag
+from app.sources.catalog import source_specs
 
 from scripts.crawl_official_requirements import (
     CrawlError, ROOT, USER_AGENT, _loopback_proxy, _write_json,
@@ -50,42 +51,12 @@ class Source:
 
 
 SOURCES = {
-    "cityu-cs": Source(
-        "cityu-cs", "www.cs.cityu.edu.hk",
-        "/academic-programmes/msc-computer-science/admissions",
-        "City University of Hong Kong", "Master of Science in Computer Science",
-        "计算机科学", "cityu",
-    ),
-    "cityu-ai": Source(
-        "cityu-ai", "www.cs.cityu.edu.hk",
-        "/en/academic-programmes/msc-artificial-intelligence/admissions",
-        "City University of Hong Kong", "Master of Science in Artificial Intelligence",
-        "人工智能", "cityu",
-    ),
-    "cityu-cybersecurity": Source(
-        "cityu-cybersecurity", "www.cs.cityu.edu.hk",
-        "/en/academic-programmes/msc-cybersecurity/admissions",
-        "City University of Hong Kong", "Master of Science in Cybersecurity",
-        "网络安全", "cityu",
-    ),
-    "hkust-it": Source(
-        "hkust-it", "seng.hkust.edu.hk",
-        "/academics/taught-postgraduate/msc-it",
-        "The Hong Kong University of Science and Technology",
-        "MSc in Information Technology", "信息技术", "hkust",
-    ),
-    "hkust-bdt": Source(
-        "hkust-bdt", "seng.hkust.edu.hk",
-        "/academics/taught-postgraduate/msc-bdt",
-        "The Hong Kong University of Science and Technology",
-        "MSc in Big Data Technology", "数据科学", "hkust",
-    ),
-    "hkust-ai": Source(
-        "hkust-ai", "seng.hkust.edu.hk",
-        "/academics/taught-postgraduate/msc-ai",
-        "The Hong Kong University of Science and Technology",
-        "MSc in Artificial Intelligence", "人工智能", "hkust",
-    ),
+    spec.source_id: Source(
+        spec.source_id, spec.host, urlsplit(spec.url).path, spec.university,
+        spec.program_name, spec.discipline, spec.parser_key,
+    )
+    for spec in source_specs()
+    if spec.parser_key in {"cityu", "hkust"}
 }
 
 

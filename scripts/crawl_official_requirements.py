@@ -22,6 +22,7 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup, Tag
+from app.sources.catalog import source_specs
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,14 +52,9 @@ class Source:
 
 
 SOURCES = {
-    "cambridge-acs": Source(
-        "cambridge-acs", "MPhil in Advanced Computer Science",
-        "/courses/directory/cscsmpacs/requirements",
-    ),
-    "cambridge-scientific-computing": Source(
-        "cambridge-scientific-computing", "MPhil in Scientific Computing",
-        "/courses/directory/pcphmpscm/requirements",
-    ),
+    spec.source_id: Source(spec.source_id, spec.program_name, urlsplit(spec.url).path)
+    for spec in source_specs()
+    if spec.parser_key == "cambridge"
 }
 
 
