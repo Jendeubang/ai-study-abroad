@@ -27,11 +27,14 @@ from app.crud import get_program
 from app.database import get_db, initialize_database, make_engine, make_session_factory, migrate_database
 from app.models import Program
 from app.routers.chat import build_router as build_chat_router
+from app.routers.history import build_router as build_history_router
 from app.routers.admin import build_router as build_admin_router
 from app.routers.programs import router as programs_router
 from app.routers.recommend import build_router as build_recommend_router
 from app.services.ai_service import AIService
 from app.services.data_review_service import active_evidence, active_rounds, review_alerts
+from app.services.history_service import prune_expired
+from app.services.vector_service import Embedder, VectorUnavailable, build_vector_index, make_embedder
 
 
 logger = logging.getLogger("study_abroad")
@@ -68,23 +71,38 @@ def create_app(
     database_url: str | None = None,
     request_timeout_seconds: float | None = None,
     ai_service: AIService | None = None,
+    vector_backend: Embedder | None = None,
 ) -> FastAPI:
     timeout = request_timeout_seconds if request_timeout_seconds is not None else settings.request_timeout_seconds
     if timeout <= 0:
         raise ValueError("REQUEST_TIMEOUT_SECONDS 必须大于零")
     active_database_url = database_url or settings.database_url
     engine = make_engine(active_database_url)
+    embedder = vector_backend or make_embedder(
+        settings.vector_backend,
+        model_path=settings.vector_model_path,
+        model_id=settings.vector_model_id,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         migrate_database(active_database_url)
         initialize_database(engine, settings.seed_path)
+        with Session(engine) as history_session:
+            prune_expired(history_session)
+        if embedder.auto_index:
+            try:
+                with Session(engine) as index_session:
+                    build_vector_index(index_session, embedder)
+            except VectorUnavailable:
+                logger.warning("local vector index initialization unavailable")
         yield
         engine.dispose()
 
     app = FastAPI(title="AI 留学检索", version="0.1.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(_app_dir / "static")), name="static")
     app.state.session_factory = make_session_factory(engine)
+    app.state.vector_embedder = embedder
     app.state.ai_service = ai_service or AIService(
         api_key=settings.ai_api_key,
         base_url=settings.ai_base_url,
@@ -99,8 +117,8 @@ def create_app(
         CORSMiddleware,
         allow_origins=list(settings.allowed_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Content-Type", "X-Request-ID", "X-History-Action"],
     )
 
     @app.middleware("http")
@@ -112,7 +130,7 @@ def create_app(
             response = _error(request, 504, "请求处理超时")
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
-        if request.url.path.startswith(("/api/admin/", "/admin/")):
+        if request.url.path.startswith(("/api/admin/", "/admin/", "/api/history")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -194,6 +212,7 @@ def create_app(
     app.include_router(programs_router)
     app.include_router(build_recommend_router(limiter))
     app.include_router(build_chat_router(limiter))
+    app.include_router(build_history_router(limiter))
     app.include_router(build_admin_router(limiter))
     return app
 

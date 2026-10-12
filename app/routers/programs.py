@@ -8,6 +8,7 @@ from app.database import get_db
 from app.schemas import ProgramRead
 from app.services.search_service import SearchCriteria, search_programs, validate_search_text
 from app.services.data_review_service import review_alerts
+from app.services.history_service import history_owner, save_search
 
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -32,6 +33,7 @@ def list_programs(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     sort: SortKey = "relevance",
     source_type: Literal["all", "official", "demo"] = "all",
+    retrieval: Literal["hybrid", "keyword", "vector"] = "hybrid",
 ):
     try:
         q = validate_search_text(q)
@@ -42,8 +44,20 @@ def list_programs(
         gpa=gpa, ielts=ielts, budget=budget, intake=intake,
         ranking_max=ranking_max, page=page, page_size=page_size, sort=sort,
         source_type=source_type,
+        retrieval=retrieval,
     )
-    return {"code": 0, "message": "ok", "data": search_programs(db, criteria), "request_id": request.state.request_id}
+    results = search_programs(
+        db, criteria, embedder=request.app.state.vector_embedder,
+    )
+    if page == 1:
+        save_search(db, history_owner(db, request), q, kind="search", filters={
+            "country": country, "degree": degree, "discipline": discipline,
+            "gpa": gpa, "ielts": ielts, "budget": budget,
+            "intake": intake, "ranking_max": ranking_max,
+            "source_type": source_type if source_type != "all" else None,
+            "retrieval": retrieval if retrieval != "hybrid" else None,
+        })
+    return {"code": 0, "message": "ok", "data": results, "request_id": request.state.request_id}
 
 
 @router.get("/{program_id}")

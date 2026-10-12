@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 from datetime import date, datetime, timezone
 from typing import Annotated, Literal
 
@@ -24,9 +25,20 @@ from app.services.data_review_service import (
     ReviewWorkflowError, decide_candidate, decide_program_candidate,
     set_source_permission, stage_round_candidate,
 )
+from app.services.vector_service import VectorUnavailable, build_vector_index
 
 
 DbSession = Annotated[Session, Depends(get_db)]
+logger = logging.getLogger("study_abroad")
+
+
+def _refresh_local_vectors(request: Request, db: Session) -> None:
+    embedder = request.app.state.vector_embedder
+    if embedder.auto_index:
+        try:
+            build_vector_index(db, embedder, source_type="official")
+        except VectorUnavailable:
+            logger.warning("local vector index refresh unavailable after review")
 
 
 class PolicyBody(BaseModel):
@@ -252,6 +264,8 @@ def build_router(limiter: Limiter) -> APIRouter:
             )
         except ReviewWorkflowError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if decision == "approve":
+            _refresh_local_vectors(request, db)
         return _response(request, {
             "id": candidate.id, "status": candidate.status,
             "reviewer": candidate.reviewer, "review_note": candidate.review_note,
@@ -314,6 +328,8 @@ def build_router(limiter: Limiter) -> APIRouter:
             )
         except ReviewWorkflowError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if decision == "approve":
+            _refresh_local_vectors(request, db)
         return _response(request, {"id": candidate.id, "status": candidate.status})
 
     return router

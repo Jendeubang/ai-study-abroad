@@ -126,6 +126,7 @@ class RecommendationFilters(BaseModel):
     ranking_max: int | None = Field(default=None, ge=1, le=10_000)
     source_type: Literal["all", "official", "demo"] = "all"
     sort: Literal["relevance", "deadline", "updated_at", "ranking", "tuition_asc", "tuition_desc"] = "relevance"
+    retrieval: Literal["hybrid", "keyword", "vector"] = "hybrid"
 
 
 class RecommendRequest(QueryRequest):

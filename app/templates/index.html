@@ -7,7 +7,7 @@
   <title>StudyCompass AI · 留学项目检索</title>
   <link rel="stylesheet" href="/static/tailwind.css">
   <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v=20261012-2" defer></script>
 </head>
 <body class="theme-{{ style }}" data-style="{{ style }}">
   <a class="skip-link" href="#main">跳至主要内容</a>
@@ -72,7 +72,8 @@
         <aside class="filter-panel" aria-labelledby="filter-title">
           <div class="panel-heading"><h2 id="filter-title">{% if style == 'editorial' %}<button id="filter-toggle" class="filter-toggle" type="button" aria-controls="filter-form" aria-expanded="true">筛选<span class="filter-chevron" aria-hidden="true"></span></button>{% else %}筛选条件{% endif %}</h2><button id="clear-filters" type="button" class="text-button">清空</button></div>
           <form id="filter-form">
-            <label>数据来源<select name="source_type"><option value="all">全部项目</option><option value="official">官网已核对</option><option value="demo">模拟项目</option></select></label>
+            <label>数据来源<select name="source_type"><option value="all"{% if default_source_type == 'all' %} selected{% endif %}>全部项目</option><option value="official"{% if default_source_type == 'official' %} selected{% endif %}>官网已核对</option><option value="demo">模拟项目</option></select></label>
+            <label>检索方式<select name="retrieval"><option value="hybrid">综合检索</option><option value="keyword">关键词</option><option value="vector">向量</option></select></label>
             <label>国家 / 地区<select name="country"><option value="">全部地区</option><option>英国</option><option>香港</option><option>新加坡</option><option>加拿大</option><option>澳大利亚</option><option>中国</option></select></label>
             <label>学位<select name="degree"><option value="">全部学位</option><option>硕士</option><option>本科</option><option>博士</option></select></label>
             <label>专业方向<input name="discipline" maxlength="150" placeholder="如：计算机科学"></label>
@@ -99,9 +100,20 @@
           {% if style != 'editorial' %}<p class="assistant-privacy">仅将问题和当前页项目传给后端。配置 AI 服务后，内容可能发送给该服务商。</p>{% endif %}
         </aside>
       </div>
+      <details id="history-panel" class="history-panel">
+        <summary>历史记录</summary>
+        <p class="history-privacy">默认不保存。开启后，本站数据库保存最近 90 天的检索与问答；浏览器仅保存访问凭证。不记录 IP，常见手机号、邮箱和身份证号会被遮盖。请勿输入其他敏感信息。</p>
+        <div class="history-actions">
+          <button id="history-opt-in" class="button button-subtle" type="button" hidden>开启保存</button>
+          <button id="history-clear" class="button button-subtle" type="button" hidden>清空记录</button>
+          <button id="history-disable" class="button button-subtle" type="button" hidden>关闭并删除全部</button>
+        </div>
+        <div id="history-status" class="history-status" role="status" aria-live="polite"></div>
+        <div id="history-list" class="history-list" aria-live="polite"></div>
+      </details>
     </main>
 
-    <footer class="site-footer">{% if style == 'editorial' %}<p>模拟数据与官网已核对的招生要求会逐条标明。条件分不代表录取概率，数据仅供参考，不保证录取；正式申请以官网最新信息为准。</p><p>隐私：查询仅用于本次检索；启用智能推荐时，内容可能发送给配置的模型服务商。</p>{% else %}<p>StudyCompass AI · 界面方案展示</p><p>数据含模拟数据及人工核对的官网招生要求；请逐条查看来源。数据仅供参考，不保证录取。</p>{% endif %}</footer>
+    <footer class="site-footer">{% if style == 'editorial' %}<p>模拟数据与官网已核对的招生要求会逐条标明。条件分不代表录取概率，数据仅供参考，不保证录取；正式申请以官网最新信息为准。</p><p>隐私：历史记录默认关闭；开启后可随时删除。智能推荐时内容可能发送给配置的模型服务商。</p>{% else %}<p>StudyCompass AI · 界面方案展示</p><p>数据含模拟数据及人工核对的官网招生要求；请逐条查看来源。数据仅供参考，不保证录取。</p>{% endif %}</footer>
   </div>
 </body>
 </html>

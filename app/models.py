@@ -74,6 +74,7 @@ class QueryLog(Base):
     parsed_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     ip_hash: Mapped[str | None] = mapped_column(String(64))
+    owner_hash: Mapped[str | None] = mapped_column(String(64), index=True)
 
 
 class ChatLog(Base):
@@ -83,6 +84,14 @@ class ChatLog(Base):
     session_id: Mapped[str] = mapped_column(String(100), nullable=False)
     user_message: Mapped[str] = mapped_column(Text, nullable=False)
     assistant_message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class HistoryConsent(Base):
+    __tablename__ = "history_consents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 

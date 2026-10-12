@@ -1,6 +1,8 @@
 .env
 .venv/
 .deps/
+.deps312/
+.models/
 __pycache__/
 .pytest_cache/
 .pytest_*/

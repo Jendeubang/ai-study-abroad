@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -23,6 +24,8 @@ class AIService:
         self._api_key = api_key.strip()
         self._base_url = base_url.rstrip("/")
         self._model = model.strip()
+        hostname = (urlparse(self._base_url).hostname or "").lower()
+        self._is_deepseek = hostname == "deepseek.com" or hostname.endswith(".deepseek.com")
         self._timeout = timeout_seconds
         self._transport = transport
 
@@ -40,7 +43,12 @@ class AIService:
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
             "response_format": {"type": "json_object"},
+            "max_tokens": 512,
         }
+        if self._is_deepseek:
+            # These extraction tasks need concise structured output, not DeepSeek's
+            # high-effort default reasoning mode, which adds substantial latency.
+            body["thinking"] = {"type": "disabled"}
         timeout = httpx.Timeout(self._timeout, connect=min(5, self._timeout))
         try:
             async with httpx.AsyncClient(timeout=timeout, transport=self._transport) as client:

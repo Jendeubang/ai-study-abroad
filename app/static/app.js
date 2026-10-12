@@ -14,6 +14,11 @@
   const chatForm = document.querySelector('#chat-form');
   const chatInput = document.querySelector('#chat-input');
   const messages = document.querySelector('#chat-messages');
+  const historyList = document.querySelector('#history-list');
+  const historyStatus = document.querySelector('#history-status');
+  const historyOptIn = document.querySelector('#history-opt-in');
+  const historyClear = document.querySelector('#history-clear');
+  const historyDisable = document.querySelector('#history-disable');
   const style = document.body.dataset.style || 'editorial';
   const state = { mode: 'search', page: 1, pageSize: 8, items: [], total: 0, pending: false, request: 0 };
   const filterToggle = document.querySelector('#filter-toggle');
@@ -65,6 +70,9 @@
     const titleGroup = node('div');
     titleGroup.append(node('p', 'program-university', item.university || '院校信息缺失'));
     titleGroup.append(node('span', `source-badge ${official ? 'source-badge-official' : 'source-badge-demo'}`, official ? '官网已核对 · 招生要求' : '模拟项目'));
+    if (official && item.review_alerts?.length) {
+      titleGroup.append(node('span', 'source-badge source-badge-review', '待复核'));
+    }
     const heading = node('h3');
     const detail = node('a', '', item.program_name || '项目名称缺失');
     detail.href = `/programs/${encodeURIComponent(item.id)}?style=${encodeURIComponent(style)}`;
@@ -84,18 +92,23 @@
     article.append(meta);
 
     const facts = node('div', 'program-facts');
-    addFact(facts, '学费', official && item.tuition == null ? '未采集' : formatTuition(item));
+    addFact(facts, item.source_id?.startsWith('hkust-') ? '2027 全日制学费' : '学费', official && item.tuition == null ? '未采集' : formatTuition(item));
     addFact(facts, '申请截止', item.deadline || (official ? '未采集' : '信息缺失'));
-    addFact(facts, official ? '雅思要求' : '雅思参考', item.ielts_min == null ? '信息缺失' : item.ielts_min);
+    addFact(facts, item.source_id?.startsWith('cityu-') ? '雅思（需提交者）' : official ? '雅思要求' : '雅思参考', item.ielts_min == null ? '信息缺失' : item.ielts_min);
     article.append(facts);
+    if (official && item.review_alerts?.length) {
+      article.append(node('p', 'program-review-note', `待复核：${item.review_alerts.join('；')}。请以大学官网为准。`));
+    }
 
     if (style !== 'editorial' || item.recommendation) {
       const reason = node('p', 'program-reason');
-      reason.append(node('strong', '', item.recommendation_source === 'ai_verified' ? '推荐依据：' : '初筛说明：'));
+      const reasonLabel = item.recommendation_source === 'ai_verified'
+        ? '推荐依据：' : item.match_notes?.length ? '需留意：' : '初筛说明：';
+      reason.append(node('strong', '', reasonLabel));
       reason.append(document.createTextNode(item.recommendation || '按现有条件检索；请打开项目来源核对要求。'));
       article.append(reason);
     }
-    if (Array.isArray(item.match_notes) && item.match_notes.length) {
+    if (Array.isArray(item.match_notes) && item.match_notes.length && item.recommendation_source !== 'rules') {
       article.append(node('p', 'program-notes', item.match_notes.join('；')));
     }
 
@@ -152,7 +165,7 @@
 
   async function api(url, options = {}) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18000);
+    const timer = setTimeout(() => controller.abort(), 65000);
     try {
       const response = await fetch(url, { ...options, signal: controller.signal, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
       const body = await response.json();
@@ -164,6 +177,69 @@
       throw error;
     } finally { clearTimeout(timer); }
   }
+
+  async function historyAction(url, method) {
+    return api(url, { method, headers: { 'X-History-Action': '1' } });
+  }
+
+  function renderHistory(data) {
+    historyOptIn.hidden = data.enabled;
+    historyClear.hidden = !data.enabled;
+    historyDisable.hidden = !data.enabled;
+    historyList.replaceChildren();
+    if (!data.enabled) {
+      historyStatus.textContent = '未开启保存。';
+      return;
+    }
+    const entries = Array.isArray(data.items) ? data.items : [];
+    historyStatus.textContent = entries.length ? `最近 ${entries.length} 条记录` : '暂无历史记录。';
+    entries.forEach(entry => {
+      if (!['search', 'recommend', 'chat'].includes(entry.kind)) return;
+      const row = node('article', 'history-item');
+      const kind = { search: '检索', recommend: '推荐', chat: '问答' }[entry.kind];
+      const when = new Date(entry.created_at);
+      const date = Number.isNaN(when.getTime()) ? '' : when.toLocaleString('zh-CN');
+      row.append(node('span', 'history-item-meta', `${kind} · ${date}`));
+      row.append(node('p', 'history-item-query', entry.query || '筛选检索'));
+      if (entry.kind === 'chat') row.append(node('p', 'history-item-answer', entry.answer || ''));
+      const remove = node('button', 'text-button', '删除');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `删除这条${kind}记录`);
+      remove.addEventListener('click', async () => {
+        remove.disabled = true;
+        try { await historyAction(`/api/history/${entry.kind}/${encodeURIComponent(entry.id)}`, 'DELETE'); await refreshHistory(); }
+        catch (error) { historyStatus.textContent = error.message || '删除失败，请重试。'; remove.disabled = false; }
+      });
+      row.append(remove);
+      historyList.append(row);
+    });
+  }
+
+  async function refreshHistory() {
+    try { renderHistory(await api('/api/history')); }
+    catch (error) { historyStatus.textContent = error.message || '历史记录暂不可用。'; }
+  }
+
+  historyOptIn.addEventListener('click', async () => {
+    historyOptIn.disabled = true;
+    try { await historyAction('/api/history/consent', 'POST'); await refreshHistory(); }
+    catch (error) { historyStatus.textContent = error.message || '开启失败，请重试。'; }
+    finally { historyOptIn.disabled = false; }
+  });
+  historyClear.addEventListener('click', async () => {
+    if (!window.confirm('确定清空此浏览器的全部历史记录吗？')) return;
+    historyClear.disabled = true;
+    try { await historyAction('/api/history', 'DELETE'); await refreshHistory(); }
+    catch (error) { historyStatus.textContent = error.message || '清空失败，请重试。'; }
+    finally { historyClear.disabled = false; }
+  });
+  historyDisable.addEventListener('click', async () => {
+    if (!window.confirm('确定关闭保存并删除全部历史记录吗？')) return;
+    historyDisable.disabled = true;
+    try { await historyAction('/api/history/consent', 'DELETE'); await refreshHistory(); }
+    catch (error) { historyStatus.textContent = error.message || '关闭失败，请重试。'; }
+    finally { historyDisable.disabled = false; }
+  });
 
   function setPending(value, mode) {
     state.pending = value;
@@ -198,12 +274,17 @@
       if (currentRequest !== state.request) return;
       state.mode = mode; state.page = page; state.items = data.items || []; state.total = data.total || 0;
       renderResults();
+      const vectorFallback = filters().retrieval !== 'keyword' && text && data.retrieval_mode === 'keyword'
+        ? '向量索引暂不可用，已使用关键词检索。' : '';
       if (mode === 'recommend') {
         const notices = [...(data.warnings || [])];
         if (!data.ai_available) notices.unshift(data.notice || 'AI 推荐暂不可用，已显示规则检索结果。');
+        if (vectorFallback) notices.push(vectorFallback);
         if (notices.length) setStatus(notices.join('；'), 'warning');
         else setStatus(style === 'editorial' ? '' : `已找到 ${state.total} 个项目。推荐依据均关联项目来源。`);
-      } else setStatus(state.total ? (style === 'editorial' ? '' : `已找到 ${state.total} 个项目。匹配分仅供初筛，不代表录取概率。`) : '没有符合当前条件的项目。');
+      } else if (vectorFallback) setStatus(vectorFallback, 'warning');
+      else setStatus(state.total ? (style === 'editorial' ? '' : `已找到 ${state.total} 个项目。匹配分仅供初筛，不代表录取概率。`) : '没有符合当前条件的项目。');
+      refreshHistory();
     } catch (error) {
       if (currentRequest === state.request) setStatus(error.message || '请求失败，请重试。', 'error');
     } finally { setPending(false, mode); }
@@ -245,9 +326,11 @@
       const data = await api('/api/chat', { method: 'POST', body: JSON.stringify({ message, program_ids: state.items.map(item => item.id) }) });
       pending.remove();
       appendMessage('', data.answer || '根据当前检索结果无法确定', data.citations || []);
+      refreshHistory();
     } catch (error) { pending.remove(); appendMessage('error', `${error.message || '问答失败'}，请稍后重试。`); }
     finally { button.disabled = false; }
   });
 
+  refreshHistory();
   run('search');
 })();

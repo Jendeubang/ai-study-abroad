@@ -96,3 +96,16 @@
 .admin-inline-label input { width: auto; }
 .admin-fact { border-top: 1px solid var(--line, #dedbd3); padding-top: .8rem; margin-top: .8rem; }
 .admin-fact pre, .admin-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.history-panel{max-width:1312px;margin:0 auto 52px;padding:17px 22px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.history-panel summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--ink)}
+.history-privacy{margin:14px 0 10px;color:var(--muted);font-size:12px;line-height:1.7}
+.history-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.history-actions [hidden]{display:none!important}
+.history-status{color:var(--muted);font-size:12px}
+.history-list{display:grid;gap:8px;margin-top:12px}
+.history-item{padding:12px 14px;border:1px solid var(--line);border-radius:8px;overflow-wrap:anywhere}
+.history-item-meta{font-size:11px;color:var(--muted)}
+.history-item-query{margin:5px 0 8px;font-size:13px;white-space:pre-wrap}
+.history-item-answer{margin:0 0 8px;color:var(--muted);font-size:12px;white-space:pre-wrap}
+.history-item .text-button{font-size:11px}
+@media(max-width:760px){.history-panel{margin:0 14px 28px}}

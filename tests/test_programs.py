@@ -13,7 +13,7 @@ def test_homepage_uses_cache_busted_app_script(client):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "/static/app.js?v=20261012-1" in response.text
+    assert "/static/app.js?v=20261012-2" in response.text
 
 
 def test_fts_search_and_country_filter(client):

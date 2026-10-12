@@ -203,10 +203,18 @@ def _parse_candidate_facts(source: Any, page_sections: list[tuple[str, str]]) ->
             if opens_on > deadline_on:
                 raise SourceParseError("申请轮次开放时间晚于截止时间")
             round_label = f"Round {match.group(1)}"
+            intake_match = re.search(
+                r"\b(20\d{2})\s+(Fall|Autumn|Spring|Winter)\b.{0,40}?\b(?:intake|entry|application round)\b",
+                text, re.IGNORECASE,
+            )
+            if intake_match is None:
+                raise SourceParseError("申请轮次缺少明确入学季")
+            term = "Fall" if intake_match.group(2).casefold() == "autumn" else intake_match.group(2).title()
+            intake = f"{intake_match.group(1)} {term}"
             facts.append(ParsedFact(
                 "application_rounds",
-                {"round_label": round_label, "opens_on": opens_on, "deadline_on": deadline_on},
-                {"round_label": round_label, "section": heading}, match.group(0), source.url,
+                {"intake": intake, "round_label": round_label, "opens_on": opens_on, "deadline_on": deadline_on},
+                {"intake": intake, "round_label": round_label, "section": heading}, match.group(0), source.url,
             ))
     return facts
 

@@ -22,6 +22,11 @@ class Settings:
     ai_model: str = os.getenv("AI_MODEL", "deepseek-flash")
     ai_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "25"))
     admin_token: str = os.getenv("ADMIN_TOKEN", "")
+    vector_backend: str = os.getenv("VECTOR_BACKEND", "hash")
+    vector_model_id: str = os.getenv(
+        "VECTOR_MODEL_ID", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    )
+    vector_model_path: Path = ROOT / os.getenv("VECTOR_MODEL_PATH", ".models/multilingual-minilm")
 
 
 settings = Settings()
