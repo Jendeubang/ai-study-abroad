@@ -1,224 +1,295 @@
-# StudyCompass AI：留学项目检索
+# StudyCompass AI 留学项目检索
 
-这是一个可本地运行的 FastAPI 留学项目检索应用。数据库初始项目为**完全模拟**的数据；经过人工核对后，也可将少量官网招生要求摘要导入本地检索数据库。每条结果显示“模拟项目”或“官网已核对 · 招生要求”，并附来源和数据更新时间。应用支持自然语言推荐与基于当前结果的问答。首页采用已选定的 A 版界面，详情页沿用相同样式。已有本地 token 保护的数据审核页；Docker 属于后续阶段。
+> 输入留学计划，检索项目、核对官网来源，并获得基于现有数据的推荐与问答。
 
-## 环境要求与变量
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688)](https://fastapi.tiangolo.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57)](https://www.sqlite.org/fts5.html)
+[![Tests](https://img.shields.io/badge/tests-pytest-4C8C4A)](#测试与评测)
 
-- Python 3.11+，SQLite 编译时须包含 FTS5。
-- 将 `.env.example` 复制为 `.env`。`DATABASE_URL` 默认指向项目目录内 `study_abroad.db`；目前仅支持 SQLite。
-- `ALLOWED_ORIGINS` 为以逗号分隔的精确前端来源。默认空值，不允许跨域浏览器调用。
-- `REQUEST_TIMEOUT_SECONDS` 默认 60 秒，为解析和推荐理由两次顺序 AI 请求预留时间；浏览器请求等待 65 秒。SQLite 忙等待最多 5 秒。
-- `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 配置后端模型调用。项目默认接入 DeepSeek OpenAI 兼容接口：`AI_BASE_URL=https://api.deepseek.com`、`AI_MODEL=deepseek-flash`；密钥只放 `.env`，不会发送到浏览器。可在 [DeepSeek 开放平台](https://platform.deepseek.com/)创建 API Key。
-- `AI_TIMEOUT_SECONDS` 默认 25 秒，单次模型请求超时或 HTTP 错误时自动降级。DeepSeek JSON Output 由服务端请求 `response_format: {"type":"json_object"}`，模型提示中也要求返回 json；API 暂不可用或输出无效时保留规则检索结果。
-- `ADMIN_TOKEN` 保护本地数据审核 API。请设置长随机值，仅保存在被 Git 忽略的 `.env` 中；审核页要求人工输入，服务端不会把 token 渲染到页面。未配置时管理 API 返回 503。
-- `VECTOR_BACKEND=hash` 默认在本地生成轻量文本向量。可改为 `sentence_transformers` 使用本地多语言句向量模型；`VECTOR_MODEL_ID` 指定首次手动下载的模型，`VECTOR_MODEL_PATH` 指定保存在本机的目录。模型文件不提交到 Git。
+## 项目简介
 
-### 配置 DeepSeek API
+StudyCompass AI 是一个以 Python 为主的留学项目检索网页。用户可以用自然语言描述背景和目标，也可以按地区、学位、专业、成绩、预算、入学季和数据来源筛选项目。项目结果附有来源链接、更新时间和规则匹配说明；AI 推荐与问答只使用当前数据库中的项目事实。
 
-1. 在 [DeepSeek 开放平台](https://platform.deepseek.com/)创建 API Key。
-2. 只把密钥写入项目根目录 `.env` 的 `AI_API_KEY`；保持 `AI_BASE_URL=https://api.deepseek.com` 和 `AI_MODEL=deepseek-flash`。
-3. 保存后重启 Uvicorn，使后端重新读取环境变量。不要把 API Key 放进前端代码、浏览器请求或 Git 提交。
-4. 调用 `POST /api/recommend`，响应中的 `data.ai_available` 为 `true` 表示该请求成功使用 AI；否则应用会返回规则检索结果并提示降级。
+数据库首次启动会载入**明确标记为模拟数据**的示例项目。官网信息只有经过来源权限核查和人工审核后才进入检索库，并逐项展示已采集的事实与证据。项目目前可在本地运行，适合功能验证和申请资料初筛；数据不保证完整或实时，也不代表录取承诺。
 
-## 本地运行
+## 产品能力
 
-在 `ai-study-abroad` 目录中运行。以下命令在 Windows CMD 和 PowerShell 都可用，无需先激活虚拟环境：
+### 项目检索与详情
 
-```bat
+- 自然语言检索、结构化筛选、分页和排序；结果区分“模拟项目”与“官网已核对”项目。
+- SQLite FTS5 负责英文关键词检索，中文使用参数化子串匹配；本地向量负责近似文本召回。
+- 结果页和详情页展示项目来源、官网采集时间、人工核对时间、字段缺失和待复核提醒。
+- GPA 分制只做粗略换算；预算币种不一致时不进行汇率推算。规则匹配分不是录取概率。
+
+### AI 推荐与项目问答
+
+- 先解析需求，再检索项目并按规则评分，最后由配置的 OpenAI 兼容 API 选择推荐依据。
+- 服务端核验 AI 引用的项目 ID 和字段值；无依据的问题回答“根据当前检索结果无法确定”。
+- AI 超时、限流、输出无效或服务不可用时保留检索结果，并提示“AI 推荐暂不可用”。
+- API Key 只保存在服务端 `.env`，页面不会读取密钥。
+
+### 官网数据审核
+
+- 来源目录限定可请求的官方 HTTPS 页面；同步前核对来源用途登记、有效期和 `robots.txt`。
+- 采集仅生成候选和简短字段证据，不自动覆盖已展示项目。审核页可核对旧值、新值、适用条件和官网链接，再批准或驳回。
+- 学费、语言要求、入学季和申请轮次分别保留证据；申请轮次不被写成项目唯一截止日期。
+- 可选的每周同步任务只提出待审核变化，管理员仍需逐项复核。
+
+### 历史记录与隐私
+
+- 搜索、推荐和问答历史默认关闭，用户主动开启后才保存到本站 SQLite 数据库。
+- 支持删除单条、清空全部、关闭保存并删除全部；记录保留 90 天。
+- 浏览器保存 HttpOnly 随机凭证，数据库仅保存其摘要，不保存客户端 IP。常见邮箱、手机号和身份证号入库前会被遮盖，但不能保证识别所有敏感信息。
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    UI[浏览器 · Jinja2 / JavaScript] --> API[FastAPI]
+    API --> DB[(SQLite · 项目与审核记录)]
+    API --> FTS[FTS5 关键词检索]
+    API --> VEC[本地向量索引]
+    API --> AI[OpenAI 兼容模型 API]
+    SYNC[限定来源的采集脚本] --> REVIEW[待审核候选]
+    REVIEW -->|人工批准| DB
+```
+
+查询先应用结构化条件，再结合关键词和向量结果排序。默认 `hash` 向量只提供轻量近似匹配；可选 `sentence-transformers` 本地模型提供语义向量。当前**未实现 BM25 分数融合或 CrossEncoder 精排**，也未使用 Chroma、FAISS 等独立向量服务。
+
+## 技术栈
+
+| 模块 | 技术 |
+| --- | --- |
+| 页面 | Jinja2、Tailwind CSS、原生 JavaScript、Fetch API |
+| API | Python 3.11+、FastAPI、Uvicorn、Pydantic v2、slowapi |
+| 数据 | SQLite、SQLAlchemy 2、Alembic、FTS5 |
+| AI | OpenAI 兼容 API；默认示例配置为 DeepSeek |
+| 向量 | SQLite `DocumentChunk`、Python 余弦相似度；可选 `sentence-transformers` |
+| 测试 | pytest、FastAPI TestClient |
+
+## 快速启动
+
+### Windows 本地运行
+
+在 `ai-study-abroad` 目录打开 PowerShell：
+
+```powershell
+Copy-Item .env.example .env
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --no-access-log
 ```
 
-如果要激活虚拟环境，CMD 使用 `.venv\Scripts\activate.bat`，PowerShell 使用 `.\.venv\Scripts\Activate.ps1`。macOS/Linux 则使用 `.venv/bin/python -m ...` 或 `source .venv/bin/activate`。启动时应用也会运行 Alembic 迁移；已由旧版启动逻辑创建的完整数据库会安全登记初始版本，不会清空数据。首次启动会将 `data/programs.json` 中的模拟记录装入空数据库；再次启动不会重复插入。访问 `http://127.0.0.1:8000/docs` 查看交互式 API 文档。
+### macOS / Linux 本地运行
 
-打开 `http://127.0.0.1:8000/` 使用正式首页。输入留学需求后可选择“仅检索”或“智能推荐”；结构化筛选和排序会与当前推荐条件一起生效，不会被清空。点击项目标题进入详情页。窄屏下可展开筛选栏。B/C 早期方案仍可通过 `/preview/research` 和 `/preview/studio` 查看。
+```bash
+cp .env.example .env
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m uvicorn app.main:app --reload --no-access-log
+```
 
-当前页面由 Jinja2、Tailwind CSS、原生 JavaScript 和本地 `app/static/style.css` 渲染，启动时不依赖外部 JavaScript 或 CSS CDN。仓库已包含构建好的 `app/static/tailwind.css`，只运行 Python 即可展示页面。修改 Tailwind 类名后，使用 Node.js 运行 `npm ci` 和 `npm run css:build` 更新静态文件；开发时可用 `npm run css:watch`。构建时禁用 Tailwind Preflight，以保留现有页面的基础样式。
+启动时应用也会自动运行 Alembic 迁移。空数据库会载入 `data/programs.json` 中的模拟数据，已有数据库不会因启动而清空。页面使用仓库内已构建的 `app/static/tailwind.css`，无需安装 Node.js；修改 Tailwind 类名后才需执行 `npm ci` 和 `npm run css:build`。
 
-三个页面的定位：
-
-| 方案 | 页面重点 | 适合的使用场景 |
-| --- | --- | --- |
-| A 清晰列表 | 自然语言输入与逐条来源阅读 | 首次了解留学项目的用户 |
-| B 检索工作台 | 紧凑筛选、排序与逐项比较 | 反复缩小申请名单的用户 |
-| C 探索卡片 | 卡片浏览与更轻的问答区域 | 移动端探索和初步发现 |
-
-布局与交互参考了 [Vercel Chatbot](https://github.com/vercel/chatbot) 的问答入口、[shadcn/ui](https://github.com/shadcn-ui/ui) 的组件组织，以及 [Meilisearch](https://github.com/meilisearch/meilisearch) 的检索产品思路。页面与代码为本项目重新实现，未复制这些项目的组件。
-
-若当前 Python 环境的 `venv`/`ensurepip` 已损坏，可在 PowerShell 中把依赖安装到项目内，临时运行：
+若当前 Python 环境无法创建虚拟环境，可临时将依赖安装到项目内：
 
 ```powershell
 python -m pip install --target .deps -r requirements.txt
 $env:PYTHONPATH = '.deps'
-python -m alembic upgrade head
 python -m uvicorn app.main:app --no-access-log
+```
+
+### 配置 AI 与向量模型
+
+复制 `.env.example` 后，按需设置下列变量；密钥只放在 `.env`：
+
+| 变量 | 用途与默认值 |
+| --- | --- |
+| `DATABASE_URL` | SQLite 数据库地址；默认项目目录内 `study_abroad.db` |
+| `ALLOWED_ORIGINS` | 允许的浏览器跨域来源；默认空值 |
+| `REQUEST_TIMEOUT_SECONDS` | 单次页面/API 请求超时；默认 60 秒 |
+| `AI_API_KEY` | 模型服务密钥；留空时 AI 功能降级 |
+| `AI_BASE_URL` / `AI_MODEL` | 默认 `https://api.deepseek.com` / `deepseek-flash` |
+| `AI_TIMEOUT_SECONDS` | 单次模型调用超时；默认 25 秒 |
+| `ADMIN_TOKEN` | 数据审核页和管理接口使用的随机令牌 |
+| `VECTOR_BACKEND` | `hash`（默认）或 `sentence_transformers` |
+| `VECTOR_MODEL_ID` / `VECTOR_MODEL_PATH` | 可选本地句向量模型名称与保存目录 |
+
+可在 [DeepSeek 开放平台](https://platform.deepseek.com/)创建 API Key。配置后重启服务，调用 `POST /api/recommend`，查看响应中的 `data.ai_available` 是否为 `true`。AI 请求可能将用户输入和所选项目字段发送给模型服务商。
+
+需要语义向量时，先安装可选依赖，在 `.env` 设置 `VECTOR_BACKEND=sentence_transformers`，再手动下载模型并建立索引：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-vector.txt
+.\.venv\Scripts\python.exe -m scripts.build_vector_index --download-model
+```
+
+默认模型为 [多语言 MiniLM](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)。请先核对其使用条款。网页请求只读取本地模型；人工审核导入或离线更新项目后，重新运行 `python -m scripts.build_vector_index`。`hash` 后端会在应用启动及管理页批准项目变更后自动更新索引。
+
+### Docker 状态
+
+仓库目前**没有 Dockerfile 或 Docker Compose 配置**，请使用上面的本地命令运行。容器化部署属于后续工作。
+
+## 常用地址
+
+| 页面或接口 | 地址 |
+| --- | --- |
+| 正式首页 | `http://127.0.0.1:8000/` |
+| 项目详情 | `http://127.0.0.1:8000/programs/1` |
+| 数据审核页 | `http://127.0.0.1:8000/admin/reviews` |
+| 交互式 API 文档 | `http://127.0.0.1:8000/docs` |
+| 健康检查 | `http://127.0.0.1:8000/api/health` |
+
+首页默认采用简洁列表样式；早期页面方案可在 `/preview/research` 和 `/preview/studio` 查看。
+
+## 项目结构
+
+```text
+ai-study-abroad/
+├─ app/
+│  ├─ main.py                 FastAPI 应用与页面路由
+│  ├─ routers/                检索、推荐、问答、历史和管理 API
+│  ├─ services/               解析、检索、向量、审核与历史逻辑
+│  ├─ sources/                限定官网来源与字段解析器
+│  ├─ templates/              首页、详情页和审核页
+│  └─ static/                 JavaScript、样式与构建后的 Tailwind
+├─ data/programs.json        模拟项目种子数据
+├─ migrations/               Alembic 迁移
+├─ scripts/                  采集、核对、索引和定时同步脚本
+├─ tests/                    API、审核和边界条件测试
+├─ .env.example              环境变量示例
+├─ requirements.txt          基础依赖
+└─ requirements-vector.txt   可选语义向量依赖
 ```
 
 ## API 示例
 
-所有接口返回 `{ "code": 0, "message": "ok", "data": ..., "request_id": "..." }`。错误也使用相同结构，并设置对应 HTTP 状态码。
+所有 API 使用 `{ "code": 0, "message": "ok", "data": ..., "request_id": "..." }` 格式；错误也带相同字段和相应 HTTP 状态码。更多参数见 `/docs`。
 
 ```bash
 curl http://127.0.0.1:8000/api/health
-curl "http://127.0.0.1:8000/api/programs?q=computer%20science&country=%E8%8B%B1%E5%9B%BD&page=1&page_size=10"
+curl "http://127.0.0.1:8000/api/programs?q=computer%20science&retrieval=hybrid&page=1&page_size=10"
 curl http://127.0.0.1:8000/api/programs/1
 curl -X POST http://127.0.0.1:8000/api/parse -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士 GPA 3.6/4 雅思7"}'
 curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士 GPA 3.6/4 雅思7","page_size":10}'
-curl -X POST http://127.0.0.1:8000/api/recommend -H "Content-Type: application/json" -d '{"query":"英国 CS 硕士","filters":{"country":"香港","sort":"ranking"}}'
 curl -X POST http://127.0.0.1:8000/api/chat -H "Content-Type: application/json" -d '{"message":"第一个项目的学费是多少？","program_ids":[1]}'
 ```
 
-搜索参数：`q`、`country`、`degree`、`discipline`、`gpa`、`ielts`、`budget`（人民币）、`intake`、`ranking_max`、`source_type`（`all`、`official`、`demo`）、`retrieval`（`hybrid`、`keyword`、`vector`）、`page`、`page_size`（最多 100）、`sort`。排序只接受 `relevance`、`deadline`、`updated_at`、`ranking`、`tuition_asc`、`tuition_desc`。学费排序按币种分组后按金额排列，不能作为跨币种价格比较。
+`GET /api/programs` 可用 `q`、`country`、`degree`、`discipline`、`gpa`、`ielts`、`budget`、`intake`、`ranking_max`、`source_type`、`retrieval`、`page`、`page_size` 和 `sort`。`page_size` 最多 100；排序仅接受 `relevance`、`deadline`、`updated_at`、`ranking`、`tuition_asc`、`tuition_desc`。`retrieval` 可选 `hybrid`、`keyword`、`vector`；响应中的 `retrieval_mode` 表示实际使用的方式。向量不可用时自动回退关键词检索。跨币种学费不能直接按价格比较。
 
-搜索词使用 SQLite FTS5；中文词使用参数化的子串匹配。结构化筛选在 SQLAlchemy 中参数化。GPA 在 4、5、100 分制之间仅做粗略归一，缺失要求和预算币种不一致会降低匹配分并给出提示，不会淘汰项目。匹配分仅用于检索排序，不代表录取概率。当前示例数据的排名也是模拟值。
+历史接口包括 `GET /api/history`、`POST /api/history/consent`、`DELETE /api/history`、`DELETE /api/history/consent` 和 `DELETE /api/history/{search|recommend|chat}/{id}`。修改操作需携带 `X-History-Action: 1`；首页提供对应按钮。
 
-### 向量检索
+## 官网数据采集与审核
 
-首页“检索方式”默认选择综合检索：合并关键词与向量命中，仍先应用地区、学位、专业、入学季及数据来源筛选，再按规则分和文本相似度排序。选“向量”仅显示向量命中的项目；选“关键词”沿用原检索。`data.retrieval_mode` 表示实际使用方式；向量模型或索引不可用时自动降级为关键词。页面显示降级提示，项目卡片里的“条件分”始终是原有规则分，不是语义相似度或录取概率。智能推荐也会用原始需求做向量召回，再由已有规则与 AI 生成带项目来源的推荐依据。
+### 固定来源与使用范围
 
-默认 `hash` 后端只用中文字符片段和英文词形成确定性向量，能提供轻量的近似文本匹配，但不理解同义词。真正的语义检索需安装可选依赖并显式下载模型：
+| 来源 | 当前范围 | 处理方式 |
+| --- | --- | --- |
+| 剑桥大学 | 两条预设 MPhil 招生要求页 | 采集学历与语言要求，经核对后导入 |
+| 香港城市大学、香港科技大学 | 六条预设课程页面 | 采集页面明示的语言或学费、入学季字段 |
+| HKU、CUHK、Oxford、UCL | 候选课程页，默认关闭 | 来源用途登记有效且人工启用后才允许采集 |
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-vector.txt
-# 在 .env 中设置 VECTOR_BACKEND=sentence_transformers 后运行：
-.\.venv\Scripts\python.exe -m scripts.build_vector_index --download-model
-# 后续人工核对导入或离线更新项目后重建；日常运行不需重复下载：
-.\.venv\Scripts\python.exe -m scripts.build_vector_index
-```
+示例官方入口包括剑桥大学的[高级计算机科学 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/cscsmpacs/requirements)和[科学计算 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/pcphmpscm/requirements)要求页、[香港城市大学计算机系](https://www.cs.cityu.edu.hk/academic-programmes/msc-computer-science/admissions)及[香港科技大学工程学院](https://seng.hkust.edu.hk/academics/taught-postgraduate/msc-it)课程页。具体使用范围须结合各站点当前条款逐站核查；可先查看[剑桥大学网站条款](https://www.cam.ac.uk/about-this-site/terms-and-conditions)和[港城大版权说明](https://www.cityu.edu.hk/web/copyright)。
 
-默认模型是 [多语言 MiniLM 句向量模型](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)。下载前检查模型使用条款；命令会下载模型到 `.models/`，网页请求只读取本地文件，不把项目数据发送给模型下载站。`hash` 后端会在应用启动及管理页批准项目变更后自动更新索引；`sentence_transformers` 后端需要手动执行上面的重建命令，索引在重建前不会使用已变化的项目向量。索引仅包含已发布项目字段，不包含未审核候选或官网网页全文。
+脚本只请求来源目录内的官方 HTTPS 页面，先检查 `robots.txt`，保持请求间隔，不访问登录区或申请系统，也不保存网页全文。**`robots.txt` 允许访问不等于允许公开再利用内容**：本地非商业研究与公开展示需分别核实网站条款和授权。采集失败、权限过期或页面变化会留下待复核状态，不会自动覆盖已发布数据。
 
-```bash
-curl "http://127.0.0.1:8000/api/programs?q=computer%20science&retrieval=hybrid&source_type=official"
-```
+### 采集与核对后导入
 
-`POST /api/parse` 返回结构化条件。`POST /api/recommend` 先解析、检索和规则打分，再让 AI 从现有字段中选择推荐依据。服务端逐项校验项目 ID 和字段值，并用数据库值生成最终推荐文本和来源引用。AI 超时、限流、非法 JSON 或引用虚构数据时，响应保留规则检索结果，标记 `ai_available=false` 和 `AI 推荐暂不可用`。`POST /api/chat` 仅接受客户端选定的项目 ID，依据真实字段生成带 `source_url` 的回答；无依据时返回“根据当前检索结果无法确定”。AI 接口每 IP 每分钟最多 10 次，普通接口最多 60 次。
-
-## 测试
+以下命令在项目目录执行；本机确需代理时，采集脚本可使用 `--proxy http://127.0.0.1:3067` 指定本机回环 HTTP 代理。
 
 ```powershell
-python -m pytest tests -q
-```
-
-## 官方招生要求采集脚本
-
-`scripts/crawl_official_requirements.py` 目前只支持两条预设的剑桥大学公开课程要求页：[高级计算机科学 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/cscsmpacs/requirements) 与 [科学计算 MPhil](https://www.postgraduate.study.cam.ac.uk/courses/directory/pcphmpscm/requirements)。采集前会检查该站点的 `robots.txt`，限定官网域名和页面、请求间隔至少 2 秒；遇到禁止抓取、403、跳转、网页结构变化或字段缺失会停止，不尝试绕过限制。脚本仅保存课程名、学历门槛、雅思及托福分数等明示事实，以及来源链接、抓取时间和页面哈希；不保存网页全文，也不访问申请系统、个人资料或登录区域。
-
-在项目目录执行：
-
-```powershell
+# 剑桥大学预设课程要求
 .\.venv\Scripts\python.exe -m scripts.crawl_official_requirements --course all
-# 本地网络需要代理时，使用本机回环代理，例如：
-.\.venv\Scripts\python.exe -m scripts.crawl_official_requirements --course all --proxy http://127.0.0.1:3067
-```
-
-可将 `--course all` 改成 `--course cambridge-acs` 或 `--course cambridge-scientific-computing`；`--output 路径` 可指定输出文件。默认输出为 `data/official_requirements/latest.json`，已加入 `.gitignore`。代理只接受本机 HTTP 回环地址，不接受外部代理或代理凭据。脚本需要联网；无法读取 `robots.txt` 时会停止。
-
-这份采集结果供**本地非商业研究与人工核对**，爬虫不会自动导入数据库。剑桥大学[网站使用条款](https://www.cam.ac.uk/about-this-site/terms-and-conditions)对资料的复制和商业再利用设有限制；若用于公开网站、生产服务、商业用途或扩大采集范围，应先核实并取得所需授权。输出中的 `manual_review_required=true` 和 `subject_requirement_needs_review=true` 提醒核对专业背景等未提取条件。英国学位等级不被推断为 GPA；费用、截止日期和录取概率也不在本脚本的采集范围内。
-
-### 核对后导入本地检索库
-
-先运行上述采集命令，再生成**默认不批准**的核对清单：
-
-```powershell
 .\.venv\Scripts\python.exe -m scripts.review_and_import prepare
-```
-
-打开 `data/official_requirements/review.json`，对每条记录点击 `source_url` 核对课程名、学历等级和各项语言成绩，并检查网站使用条款。确认只在允许的本地非商业范围使用后，将顶层 `rights_confirmed` 改为 `true`；只把确认无误的记录的 `approved` 改为 `true`，并为每条填写至少 8 字的 `review_note`。未批准的记录不会导入。清单绑定采集快照的摘要；采集内容发生变化后，须生成新的清单，不能沿用旧批准。默认清单已存在时，`prepare` 不会覆盖它；可用 `--review 另一文件.json` 保存新清单。
-
-核对完成后执行：
-
-```powershell
+# 核对 data/official_requirements/review.json 并批准后：
 .\.venv\Scripts\python.exe -m scripts.review_and_import import
-```
 
-脚本使用与网页相同的 `.env` `DATABASE_URL`。它会自动运行 Alembic 迁移，按课程来源 ID 更新同一条官网项目；同一网页快照重复导入不会生成重复项目或刷新核对时间。导入后刷新首页，在“数据来源”中选择“官网已核对”；卡片和详情页会显示大学官网链接、官网采集时间及人工核对时间。**“数据更新时间”指最近一次采集，不是官网页面的发布日期。** 未采集的学费、截止日期、排名等继续显示为缺失，不会从模拟项目填充。采集 JSON 和核对清单均被 Git 忽略，不会随代码上传。
-
-### 扩充香港院校课程
-
-`scripts/crawl_additional_programs.py` 另外预设了[香港城市大学计算机系](https://www.cs.cityu.edu.hk/academic-programmes/msc-computer-science/admissions)的计算机科学、人工智能和网络安全硕士，以及[香港科技大学工程学院](https://seng.hkust.edu.hk/academics/taught-postgraduate/msc-it)的信息技术、大数据技术和人工智能硕士，共 6 个固定课程页面。只采集港城大页面明确列出的雅思总分，及港科大页面明确列出的 **2027/28 全日制学费和入学季**；其他字段保持缺失。港城大雅思要求有适用条件，托福出现新旧两种分制，因此当前不会把托福数字写入旧的 0–120 分字段。港科大页面有多轮申请日期，当前不将其中任一日期填为通用截止日期。
-
-脚本对每个官网先读取 `robots.txt`，仅请求预设的 HTTPS 域名与页面，至少间隔 2 秒；遇到禁止抓取、跳转、403、页面结构变化或超大响应时停止，不尝试绕过限制。只在本地保存短证据、来源网址、抓取时间和页面哈希，不保存网页全文，也不会自动导入数据库。
-
-```powershell
-.\.venv\Scripts\python.exe -m scripts.crawl_additional_programs --course all --proxy http://127.0.0.1:3067
+# 港城大与港科大预设项目
+.\.venv\Scripts\python.exe -m scripts.crawl_additional_programs --course all
 .\.venv\Scripts\python.exe -m scripts.review_additional_programs prepare
-```
-
-不需要代理时省略 `--proxy`。`--course` 可指定单个来源 ID，使用 `--help` 查看列表。默认采集文件是 `data/official_requirements/additional_latest.json`，核对清单是 `data/official_requirements/additional_review.json`；两者都不会提交到 Git。重新采集后应使用另一个 `--review` 文件名生成新清单，旧清单绑定旧快照，不能重复批准新数据。
-
-逐条打开清单里的 `source_url`，对照 `evidence` 核对项目名称、雅思分数或学费与入学季，并核查拟批准课程所属网站的最新版权和使用条款，包括[港城大版权说明](https://www.cityu.edu.hk/web/copyright)。确认当前**本地非商业研究**用途得到允许后，才把顶层 `rights_confirmed` 设为 `true` 并在 `rights_note` 写明已核查的网站（至少 8 字）；仅把逐项核实的记录设为 `approved: true` 并填写至少 8 字的 `review_note`。不能确认使用权限或事实时，保持未批准。准备完成后先验证，再导入：
-
-```powershell
 .\.venv\Scripts\python.exe -m scripts.review_additional_programs validate
 .\.venv\Scripts\python.exe -m scripts.review_additional_programs import
 ```
 
-导入采用来源 ID 更新，不覆盖模拟数据，也不自动填补未采集字段。若未来要将这些数据公开部署或用于商业服务，需另外确认相应的再利用权限。
+核对清单默认不批准。管理员须逐项打开 `source_url`，核对数值、适用条件、简短证据及网站使用条款，再填写 `rights_confirmed`、`approved` 和审核说明。清单绑定采集快照；重新采集后不能沿用旧批准。采集文件与核对清单保存在 Git 忽略的 `data/official_requirements/`。英国学位等级不会被推断为 GPA，未采集的学费、截止日期和排名也不会用模拟值填充。
 
-### 逐字段证据、变化核对与申请轮次
-
-现有 6 条港校项目可以把**此前已批准且摘要仍与数据库一致**的快照迁入逐字段证据表。此命令不会重新批准、重抓官网或改变检索项目值：
+已有港校审核快照可在摘要仍一致时补入逐字段证据表；此操作不会重抓官网或改变检索值：
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.backfill_additional_evidence
 ```
 
-证据表保留数值、简短官网证据、来源链接、页面摘要、采集时间、人工核对时间和适用条件。当前港科大学费明确限定为 **2027/28、全日制、HKD**；港城大雅思限定于需要提交英语成绩的申请人。申请轮次有独立表，不把任一轮截止日期写入项目的通用 `deadline` 字段。原有 2 条剑桥项目目前没有可用于此命令的港校格式证据，详情页会明确提示逐字段证据待补录。
+学费证据须标明币种、学年和就读形式；语言要求须标明适用人群。多轮申请日期存入独立申请轮次表，不把某一轮日期当成项目唯一截止日期。“数据更新时间”表示最近采集时间，不代表官网页面发布日期。
 
-在 `.env` 配置 `ADMIN_TOKEN` 并重启服务后，打开 `http://127.0.0.1:8000/admin/reviews`。先为每个官网主机登记条款链接、核查人、核查说明及**本地非商业研究**使用范围。台账中的公开展示范围必须单独核实并明确登记，不能由本地研究范围推断。管理员 token 只在当前页面内存中使用，不存到浏览器持久存储；管理 API 要求 `X-Admin-Token` 请求头。
+### 来源权限、变更审核与每周同步
 
-台账登记完成后可手动运行复查：
-
-```powershell
-.\.venv\Scripts\python.exe -m scripts.sync_additional_programs --course all
-# 本机需要代理时：
-.\.venv\Scripts\python.exe -m scripts.sync_additional_programs --course all --proxy http://127.0.0.1:3067
-```
-
-此命令仍只访问脚本内固定的 6 个页面，逐站核对使用范围并检查 `robots.txt`。新字段值或页面摘要变化会生成待审核项；采集失败会记录状态。**这些情况都不会自动覆盖已发布值。** 审核页显示已发布值、待审核值、适用条件、官网短证据和原页链接；批准或驳回必须填写核查人和说明，并写入审核记录。审核页还可在最近一次成功采集的页面下人工登记多个申请轮次，逐条批准。
-
-详情页与结果卡片会提示待审核变化、最近一次采集失败，以及逐字段证据超过 90 天未核对。申请轮次到期会在详情页标注。当前统一同步目录含既有港校来源和港英候选课程页；HKU、CUHK、Oxford、UCL 候选来源默认关闭。新来源只有在登记了尚未过期且覆盖相应用途的来源权限后，才允许请求。
-
-### 港英官网每周同步
-
-统一同步器只访问来源目录中固定的 HTTPS 页面，检查 `robots.txt`、串行请求并遵守间隔；不会发现或遍历新链接。它只提取页面明确列出的招生事实，不保存网页全文。首次发现的项目和所有后续字段变化都进入审核队列，批准前不会改变检索数据库。公开展示用途必须逐站单独核验并登记，不能从本地研究权限推断。
-
-确认 `.venv` 已安装项目依赖，并已在管理页为目标网站登记用途权限后，可手动运行：
+在 `.env` 设置 `ADMIN_TOKEN` 并重启服务后，打开 `/admin/reviews`。先逐站登记条款链接、核查日期、核查人及允许用途，再启用来源。管理 API 要求 `X-Admin-Token`，网页不会把 token 保存到浏览器持久存储。
 
 ```powershell
+# 手动同步已启用且权限有效的来源
 .\.venv\Scripts\python.exe -m scripts.sync_program_sources --all
-# 仅同步指定来源：
+# 只检查一个来源
 .\.venv\Scripts\python.exe -m scripts.sync_program_sources --source hku-msccs-application
 ```
 
-Windows 可显式注册当前用户的计划任务，每周一上午 08:00（Asia/Shanghai）。注册脚本要求 Windows 时区设为 `China Standard Time`，避免系统时区不同导致运行时刻偏差：
+首次发现的项目、字段变化和申请轮次都会进入审核队列。审核页展示旧值、新值、适用条件、官网短证据、采集时间和审核记录；批准前不改变公开检索结果。采集失败或证据超过 90 天未复核时，页面会提示核对。
+
+Windows 可显式注册当前用户的计划任务，每周一 08:00（Asia/Shanghai）运行同步；注册前需确认系统时区为 `China Standard Time`：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register_weekly_sync_task.ps1
-```
-
-此任务以当前用户的有限权限运行，忽略重叠运行；不会在应用启动时自动安装。脚本通过项目虚拟环境运行同步器，日志追加到 `logs/source-sync.log`（该目录不会提交到 Git）。查看管理页 `/admin/reviews` 的“每周同步记录”和来源清单可检查运行摘要、逐来源失败/跳过状态、最近成功时间和待审核项目数。删除计划任务：
-
-```powershell
+# 停用计划任务：
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\remove_weekly_sync_task.ps1
 ```
 
-Linux 可用 `flock` 防止并发，并明确设定上海时区。将路径替换为部署目录后加入用户 crontab：
+定时任务不会随应用启动自动安装。运行结果在管理页和 `logs/source-sync.log` 查看；同步器只提出候选，人工审核仍是发布数据的必要步骤。
+
+Linux 可使用 `flock` 防止任务重叠，并在用户 crontab 中指定上海时区。将下面路径替换为实际部署目录：
 
 ```cron
 TZ=Asia/Shanghai
 0 8 * * 1 cd /srv/studycompass/ai-study-abroad && /usr/bin/flock -n /tmp/studycompass-source-sync.lock /srv/studycompass/ai-study-abroad/.venv/bin/python -m scripts.sync_program_sources --all >> /srv/studycompass/ai-study-abroad/logs/source-sync.log 2>&1
 ```
 
-同步失败不会自动扩大重试或绕过来源限制；管理员应检查运行记录、条款权限和官网页面后再处理。定期任务只负责提出候选，人工核实和批准仍是发布数据的必要步骤。
+## 测试与评测
 
-## 隐私与免责声明
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests -q
+node --check app\static\app.js
+```
 
-历史记录默认关闭。用户在首页“历史记录”中主动点击“开启保存”后，才会把后续检索、智能推荐和问答保存到本站 SQLite 数据库；浏览器只保存 HttpOnly、SameSite=Strict 的随机凭证，数据库只保存其 SHA-256 摘要，不保存原始凭证或客户端 IP。常见邮箱、内地手机号及身份证号会在入库前遮盖，但不能保证识别所有个人信息，请勿输入其他敏感内容。记录保留 90 天，应用启动及访问历史接口时清理过期记录。用户可删除单条、清空全部，或“关闭并删除全部”；关闭后旧凭证失效。无账号系统，清除浏览器 Cookie 后无法恢复旧历史；服务器备份需按部署方的备份策略单独清理。
+测试覆盖健康检查、搜索筛选与分页、AI 失败降级、向量检索、官网数据审核、历史同意与删除等流程。`node --check` 只检查 JavaScript 语法，未安装 Node.js 时可略过。当前仓库尚无独立的检索效果评测集；新增模型或排序策略时，应使用实际查询与人工判断的相关性样本评估。
 
-历史接口：`GET /api/history` 查看当前浏览器的最多 100 条记录，`POST /api/history/consent` 开启，`DELETE /api/history/{search|recommend|chat}/{id}` 删单条，`DELETE /api/history` 清空，`DELETE /api/history/consent` 关闭并删除。所有修改请求都要求 `X-History-Action: 1`，同源浏览器请求会携带访问凭证。旧版无归属的预留日志不会作为任何用户的历史展示。
+## 安全设计
 
-启用 AI 后，查询和所选项目字段会发送给 `.env` 配置的模型服务商，请按该服务商的隐私条款使用。应用日志不记录请求参数或密钥。初始示例数据及 `example.org` 来源链接均为模拟内容，不能据此申请。人工核对的官网记录仅覆盖明确采集的部分招生要求；项目数据仅供参考，不保证录取，费用、要求和截止日期应以真实项目官网为准。
+- 项目字段和官网证据须来自已发布数据库；AI 输出经过项目 ID 与字段值校验，不接受虚构项目事实。
+- 用户输入有长度和格式校验；SQLAlchemy 查询参数化，页面使用 Jinja2 自动转义及 JavaScript `textContent`。
+- 普通接口与 AI 接口分别限流；跨域来源默认不开放。日志不记录 API Key、完整搜索词或完整问答内容。
+- 管理接口通过 `ADMIN_TOKEN` 保护；公开展示权限独立于本地研究权限。
+- 历史记录默认关闭，访问凭证只存在浏览器 Cookie，记录可删除并按 90 天保留期限清理。删除不自动清除已有数据库备份。
+
+## 当前状态
+
+| 已实现 | 仍需完善 |
+| --- | --- |
+| 本地网页、项目详情、搜索、规则评分、AI 推荐与问答降级 | 更大规模且逐站确认再利用权限的官网数据 |
+| 固定来源采集、逐字段证据、人工审核与可选每周同步 | 面向公开服务的部署与运维配置 |
+| SQLite FTS5、轻量向量检索、可选本地句向量模型 | BM25 分数融合、Rerank 精排与检索效果评测 |
+| 主动同意的历史记录与删除 | 跨设备账号及历史同步 |
+
+## 相关文档
+
+- [环境变量示例](.env.example)
+- [基础依赖](requirements.txt)与[可选向量依赖](requirements-vector.txt)
+- [API 交互文档](http://127.0.0.1:8000/docs)（本地服务启动后可访问）
+
+## 许可证
+
+仓库目前未提供开源许可证文件。代码公开可见不代表自动获得复制、分发或商业使用授权；如需复用，请先联系仓库所有者确认许可。
+
+## 免责声明
+
+模拟项目及 `example.org` 链接不能用于正式申请。官网已核对项目只覆盖明确采集并经人工批准的字段。所有数据仅供参考，不保证录取；费用、要求、轮次和截止日期请以项目官网最新信息为准。
