@@ -13,12 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Program, ReviewCandidate, SourceCheck, SourceDefinition, SourcePermission
+from app.models import (
+    Program, ProgramCandidate, ReviewCandidate, SourceCheck, SourceDefinition,
+    SourcePermission, SyncRun,
+)
 from app.sources.catalog import (
     SourceCatalogError, permission_expiry, set_source_enabled,
 )
 from app.services.data_review_service import (
-    ReviewWorkflowError, decide_candidate, set_source_permission, stage_round_candidate,
+    ReviewWorkflowError, decide_candidate, decide_program_candidate,
+    set_source_permission, stage_round_candidate,
 )
 
 
@@ -46,6 +50,10 @@ class DecisionBody(BaseModel):
 
     reviewer: str = Field(min_length=1, max_length=100)
     note: str = Field(min_length=8, max_length=500)
+
+
+class ProgramCandidateDecisionBody(DecisionBody):
+    purpose: Literal["local_non_commercial_research", "public_display"] = "local_non_commercial_research"
 
 
 class RoundBody(BaseModel):
@@ -78,6 +86,30 @@ def _candidate_data(candidate: ReviewCandidate, program: Program) -> dict:
         "source_url": candidate.source_url,
         "retrieved_at": candidate.retrieved_at.isoformat(),
         "status": candidate.status,
+        "reviewed_at": candidate.reviewed_at.isoformat() if candidate.reviewed_at else None,
+        "reviewer": candidate.reviewer,
+        "review_note": candidate.review_note,
+    }
+
+
+def _program_candidate_data(candidate: ProgramCandidate) -> dict:
+    metadata = candidate.program_metadata
+    return {
+        "id": candidate.id,
+        "programme_key": candidate.programme_key,
+        "university": metadata.get("university", ""),
+        "country": metadata.get("country", ""),
+        "city": metadata.get("city"),
+        "program_name": metadata.get("program_name", ""),
+        "degree": metadata.get("degree", ""),
+        "discipline": metadata.get("discipline", ""),
+        "source_ids": candidate.source_ids,
+        "source_snapshots": candidate.source_snapshots,
+        "facts": candidate.facts,
+        "snapshot_sha256": candidate.snapshot_sha256,
+        "retrieved_at": candidate.retrieved_at.isoformat(),
+        "status": candidate.status,
+        "created_at": candidate.created_at.isoformat(),
         "reviewed_at": candidate.reviewed_at.isoformat() if candidate.reviewed_at else None,
         "reviewer": candidate.reviewer,
         "review_note": candidate.review_note,
@@ -128,6 +160,21 @@ def build_router(limiter: Limiter) -> APIRouter:
             expires_at = permission_expiry(policy) if policy else None
             expired = expires_at is None or now >= expires_at
             allowed_purposes = [] if expired or policy.use_scope == "unverified" else [policy.use_scope]
+            latest_check = db.scalar(select(SourceCheck).where(
+                SourceCheck.source_id == source.source_id,
+            ).order_by(SourceCheck.checked_at.desc(), SourceCheck.id.desc()).limit(1))
+            last_success = db.scalar(select(SourceCheck).where(
+                SourceCheck.source_id == source.source_id,
+                SourceCheck.status.in_(("changed", "unchanged")),
+            ).order_by(SourceCheck.checked_at.desc(), SourceCheck.id.desc()).limit(1))
+            pending_programme = db.scalar(select(ProgramCandidate.id).where(
+                ProgramCandidate.programme_key == source.programme_key,
+                ProgramCandidate.status == "pending",
+            ).limit(1))
+            pending_changes = db.scalar(select(ReviewCandidate.id).where(
+                ReviewCandidate.source_url == source.url,
+                ReviewCandidate.status == "pending",
+            ).limit(1))
             data.append({
                 "source_id": source.source_id,
                 "programme_key": source.programme_key,
@@ -146,8 +193,69 @@ def build_router(limiter: Limiter) -> APIRouter:
                 "allowed_purposes": allowed_purposes,
                 "reviewer": policy.reviewer if policy else None,
                 "note": policy.note if policy else None,
+                "last_check_at": latest_check.checked_at.isoformat() if latest_check else None,
+                "last_check_status": latest_check.status if latest_check else None,
+                "last_success_at": last_success.checked_at.isoformat() if last_success else None,
+                "has_pending_review": pending_programme is not None or pending_changes is not None,
             })
         return _response(request, data)
+
+    @router.get("/sync-runs")
+    @limiter.limit("20/minute")
+    def list_sync_runs(
+        request: Request, db: DbSession, _admin: Admin,
+        limit: Annotated[int, Query(ge=1, le=30)] = 30,
+    ):
+        runs = list(db.scalars(select(SyncRun).order_by(
+            SyncRun.started_at.desc(), SyncRun.id.desc(),
+        ).limit(limit)))
+        return _response(request, [{
+            "run_id": run.run_id,
+            "trigger": run.trigger,
+            "started_at": run.started_at.isoformat(),
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "eligible_count": run.eligible_count,
+            "checked_count": run.checked_count,
+            "changed_count": run.changed_count,
+            "failed_count": run.failed_count,
+            "skipped_count": run.skipped_count,
+            "pending_count": run.pending_count,
+            "source_statuses": run.source_statuses,
+        } for run in runs])
+
+    @router.get("/program-candidates")
+    @limiter.limit("20/minute")
+    def list_program_candidates(
+        request: Request, db: DbSession, _admin: Admin,
+        status: Annotated[Literal["pending", "approved", "rejected", "all"], Query()] = "pending",
+    ):
+        statement = select(ProgramCandidate).order_by(
+            ProgramCandidate.created_at.desc(), ProgramCandidate.id.desc(),
+        )
+        if status != "all":
+            statement = statement.where(ProgramCandidate.status == status)
+        candidates = list(db.scalars(statement.limit(200)))
+        return _response(request, [_program_candidate_data(candidate) for candidate in candidates])
+
+    @router.post("/program-candidates/{candidate_id}/{decision}")
+    @limiter.limit("20/minute")
+    def decide_program(
+        request: Request, db: DbSession, _admin: Admin,
+        candidate_id: int, decision: Literal["approve", "reject"],
+        body: ProgramCandidateDecisionBody,
+    ):
+        try:
+            candidate = decide_program_candidate(
+                db, candidate_id,
+                decision="approved" if decision == "approve" else "rejected",
+                reviewer=body.reviewer, note=body.note, purpose=body.purpose,
+            )
+        except ReviewWorkflowError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _response(request, {
+            "id": candidate.id, "status": candidate.status,
+            "reviewer": candidate.reviewer, "review_note": candidate.review_note,
+        })
 
     @router.post("/sources")
     @limiter.limit("20/minute")

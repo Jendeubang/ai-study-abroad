@@ -99,3 +99,12 @@ def test_detail_shows_field_scope_rounds_and_review_alert(client):
     assert "全日制" in response.text
     assert "第一轮" in response.text
     assert "官网说明全日制学费" in response.text
+
+
+def test_admin_review_page_has_sync_and_initial_program_review_sections(client):
+    response = client.get("/admin/reviews")
+    assert response.status_code == 200
+    assert 'id="sync-overview"' in response.text
+    assert 'id="program-candidate-list"' in response.text
+    assert "每周同步记录" in response.text
+    assert "新项目待审核" in response.text

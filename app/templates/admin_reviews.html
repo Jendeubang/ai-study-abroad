@@ -19,6 +19,8 @@
       </form>
       <p id="admin-status" class="status" role="status" aria-live="polite"></p>
       <div id="admin-content" hidden>
+        <section class="admin-section"><div class="admin-section-title"><h2>每周同步记录</h2><button type="button" id="refresh-sync" class="text-button">刷新全部</button></div><div id="sync-overview" class="admin-list"></div></section>
+        <section class="admin-section"><h2>新项目待审核</h2><p>首次采集只生成候选。核实字段证据和用途权限后批准，项目才会进入检索。</p><div id="program-candidate-list" class="admin-list"></div></section>
         <section class="admin-section"><div class="admin-section-title"><h2>待核对变化</h2><button type="button" id="refresh-reviews" class="text-button">刷新</button></div><div id="review-list" class="admin-list"></div></section>
         <section class="admin-section"><h2>网站使用范围</h2><p>每个网站分别登记条款链接和允许用途。本地研究不代表公开展示授权。</p><div id="source-list" class="admin-list"></div></section>
         <section class="admin-section"><h2>登记申请轮次</h2><p>先运行官网采集，再依据最新采集页面填写轮次和证据；提交后仍需批准。</p>

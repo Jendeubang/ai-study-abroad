@@ -92,3 +92,7 @@
 .admin-empty{color:var(--muted)}
 @media(max-width:700px){.admin-login,.admin-comparison{display:block}.admin-login button{margin-top:12px;width:100%}.admin-comparison>div+div{margin-top:10px}.admin-form,.admin-decision{grid-template-columns:1fr}.admin-form label,.admin-decision input:nth-child(2),.admin-wide{grid-column:1}}
 [hidden]{display:none!important}
+.admin-inline-label { display: inline-flex; align-items: center; gap: .55rem; }
+.admin-inline-label input { width: auto; }
+.admin-fact { border-top: 1px solid var(--line, #dedbd3); padding-top: .8rem; margin-top: .8rem; }
+.admin-fact pre, .admin-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
