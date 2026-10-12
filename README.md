@@ -107,6 +107,38 @@ python -m pytest tests -q
 
 脚本使用与网页相同的 `.env` `DATABASE_URL`。它会自动运行 Alembic 迁移，按课程来源 ID 更新同一条官网项目；同一网页快照重复导入不会生成重复项目或刷新核对时间。导入后刷新首页，在“数据来源”中选择“官网已核对”；卡片和详情页会显示大学官网链接、官网采集时间及人工核对时间。**“数据更新时间”指最近一次采集，不是官网页面的发布日期。** 未采集的学费、截止日期、排名等继续显示为缺失，不会从模拟项目填充。采集 JSON 和核对清单均被 Git 忽略，不会随代码上传。
 
+### 港英官网每周同步
+
+统一同步器只访问来源目录中固定的 HTTPS 页面，检查 `robots.txt`、串行请求并遵守间隔；不会发现或遍历新链接。它只提取页面明确列出的招生事实，不保存网页全文。首次发现的项目和所有后续字段变化都进入审核队列，批准前不会改变检索数据库。公开展示用途必须逐站单独核验并登记，不能从本地研究权限推断。
+
+确认 `.venv` 已安装项目依赖，并已在管理页为目标网站登记用途权限后，可手动运行：
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.sync_program_sources --all
+# 仅同步指定来源：
+.\.venv\Scripts\python.exe -m scripts.sync_program_sources --source hku-msccs-application
+```
+
+Windows 可显式注册当前用户的计划任务，每周一上午 08:00（Asia/Shanghai）。注册脚本要求 Windows 时区设为 `China Standard Time`，避免系统时区不同导致运行时刻偏差：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\register_weekly_sync_task.ps1
+```
+
+此任务以当前用户的有限权限运行，忽略重叠运行；不会在应用启动时自动安装。脚本通过项目虚拟环境运行同步器，日志追加到 `logs/source-sync.log`（该目录不会提交到 Git）。查看管理页 `/admin/reviews` 的“每周同步记录”和来源清单可检查运行摘要、逐来源失败/跳过状态、最近成功时间和待审核项目数。删除计划任务：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\remove_weekly_sync_task.ps1
+```
+
+Linux 可用 `flock` 防止并发，并明确设定上海时区。将路径替换为部署目录后加入用户 crontab：
+
+```cron
+TZ=Asia/Shanghai
+0 8 * * 1 cd /srv/studycompass/ai-study-abroad && /usr/bin/flock -n /tmp/studycompass-source-sync.lock /srv/studycompass/ai-study-abroad/.venv/bin/python -m scripts.sync_program_sources --all >> /srv/studycompass/ai-study-abroad/logs/source-sync.log 2>&1
+```
+
+同步失败不会自动扩大重试或绕过来源限制；管理员应检查运行记录、条款权限和官网页面后再处理。定期任务只负责提出候选，人工核实和批准仍是发布数据的必要步骤。
 ## 隐私与免责声明
 
 当前不保存搜索词、问答内容或客户端 IP；`QueryLog` 和 `ChatLog` 仍是预留表。启用 AI 后，查询和所选项目字段会发送给 `.env` 配置的模型服务商，请按该服务商的隐私条款使用。应用日志不记录请求参数或密钥。初始示例数据及 `example.org` 来源链接均为模拟内容，不能据此申请。人工核对的官网记录仅覆盖明确采集的部分招生要求；项目数据仅供参考，不保证录取，费用、要求和截止日期应以真实项目官网为准。
