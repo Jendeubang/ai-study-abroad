@@ -20,12 +20,14 @@ depends_on = None
 def upgrade() -> None:
     connection = op.get_bind()
     inspector = sa.inspect(connection)
-    app_tables = set(Base.metadata.tables)
+    # Later model additions must not change what the original bootstrap checks.
+    app_tables = {"universities", "programs", "query_logs", "chat_logs", "document_chunks"}
     existing = app_tables.intersection(inspector.get_table_names())
     if existing:
         if existing != app_tables:
             raise RuntimeError("已有项目表不完整，已停止迁移以保护现有数据")
-        for name, table in Base.metadata.tables.items():
+        for name in app_tables:
+            table = Base.metadata.tables[name]
             actual_columns = {
                 column["name"]: (str(column["type"]), column["nullable"], column["primary_key"])
                 for column in inspector.get_columns(name)

@@ -38,6 +38,7 @@ class ProgramRead(BaseModel):
     tags: str | None
     updated_at: datetime
     data_origin: Literal["demo", "official_reviewed"]
+    source_id: str | None
     source_retrieved_at: datetime | None
     reviewed_at: datetime | None
     academic_standard: str | None
@@ -48,6 +49,7 @@ class ProgramListItem(ProgramRead):
     match_score: int = Field(ge=0, le=100)
     match_notes: list[str]
     university_ranking: int | None
+    review_alerts: list[str] = Field(default_factory=list)
 
 
 class GPAValue(BaseModel):

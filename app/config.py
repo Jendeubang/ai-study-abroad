@@ -16,11 +16,12 @@ class Settings:
         origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "").split(",") if origin.strip()
     )
     seed_path: Path = ROOT / "data" / "programs.json"
-    request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "20"))
+    request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "60"))
     ai_api_key: str = os.getenv("AI_API_KEY", "")
-    ai_base_url: str = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
-    ai_model: str = os.getenv("AI_MODEL", "")
-    ai_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "6"))
+    ai_base_url: str = os.getenv("AI_BASE_URL", "https://api.deepseek.com")
+    ai_model: str = os.getenv("AI_MODEL", "deepseek-flash")
+    ai_timeout_seconds: float = float(os.getenv("AI_TIMEOUT_SECONDS", "25"))
+    admin_token: str = os.getenv("ADMIN_TOKEN", "")
 
 
 settings = Settings()

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Program, University
+from app.models import EvidenceFact, Program, SourceCheck, University
 from scripts.crawl_official_requirements import ROBOTS_URL, SOURCES, TERMS_URL
 
 
@@ -28,6 +28,43 @@ RECORD_FIELDS = {
     "retrieved_at", "source_sha256",
 }
 SCORE_FIELDS = {"overall", "listening", "writing", "reading", "speaking"}
+SCORE_LABELS = {
+    "overall": "Total", "listening": "Listening", "writing": "Writing",
+    "reading": "Reading", "speaking": "Speaking",
+}
+
+
+def _field_evidence(record: dict, program: Program, reviewed_at: datetime) -> list[EvidenceFact]:
+    source_url = record["source_url"]
+    digest = record["source_sha256"]
+    retrieved_at = _time(record["retrieved_at"])
+    evidence = [EvidenceFact(
+        program_id=program.id,
+        field_name="academic_standard",
+        value_json=json.dumps({"value": record["academic_standard"]}, ensure_ascii=False),
+        scope_json=json.dumps({"applies_when": "该项目官网列出的学术要求"}, ensure_ascii=False),
+        evidence_excerpt=(
+            "Expected Academic Standard: Applicants for this course should have achieved a "
+            f"{record['academic_standard']}."
+        ),
+        source_url=source_url, source_sha256=digest,
+        retrieved_at=retrieved_at, reviewed_at=reviewed_at,
+        reviewer="本地人工核对清单（未记录个人姓名）", active=True,
+    )]
+    for exam in ("ielts", "toefl"):
+        exam_title = "IELTS (Academic)" if exam == "ielts" else "TOEFL Internet Score"
+        for component, score in record[exam].items():
+            evidence.append(EvidenceFact(
+                program_id=program.id,
+                field_name=f"{exam}_{component}",
+                value_json=json.dumps({"value": score}, ensure_ascii=False),
+                scope_json=json.dumps({"applies_when": f"官网 {exam_title} 要求表列示分数"}, ensure_ascii=False),
+                evidence_excerpt=f"{exam_title} — {SCORE_LABELS[component]}: {score}",
+                source_url=source_url, source_sha256=digest,
+                retrieved_at=retrieved_at, reviewed_at=reviewed_at,
+                reviewer="本地人工核对清单（未记录个人姓名）", active=True,
+            ))
+    return evidence
 
 
 def _time(value: object) -> datetime:
@@ -179,8 +216,25 @@ def import_reviewed_snapshot(session: Session, batch: dict, review: dict) -> dic
             program = session.scalar(select(Program).where(Program.source_id == record["source_id"]))
             if program is not None and program.data_origin != "official_reviewed":
                 raise ReviewError("已有同来源的非官网项目，停止覆盖")
-            if program is not None and program.source_sha256 == record["source_sha256"]:
+            same_snapshot = program is not None and program.source_sha256 == record["source_sha256"]
+            if same_snapshot:
                 counts["unchanged"] += 1
+                reviewed_at = program.reviewed_at or datetime.now(timezone.utc)
+                if not session.scalar(select(EvidenceFact.id).where(
+                    EvidenceFact.program_id == program.id,
+                    EvidenceFact.source_sha256 == record["source_sha256"],
+                    EvidenceFact.active.is_(True),
+                ).limit(1)):
+                    session.add_all(_field_evidence(record, program, reviewed_at))
+                if not session.scalar(select(SourceCheck.id).where(
+                    SourceCheck.source_id == record["source_id"],
+                    SourceCheck.source_sha256 == record["source_sha256"],
+                ).limit(1)):
+                    session.add(SourceCheck(
+                        source_id=record["source_id"], program_id=program.id,
+                        source_url=record["source_url"], source_sha256=record["source_sha256"],
+                        checked_at=_time(record["retrieved_at"]), status="unchanged",
+                    ))
                 continue
             if program is None:
                 program = Program(university_id=university.id)
@@ -218,6 +272,14 @@ def import_reviewed_snapshot(session: Session, batch: dict, review: dict) -> dic
             program.language_details_json = json.dumps({
                 "ielts": record["ielts"], "toefl": record["toefl"],
             }, ensure_ascii=False, sort_keys=True)
+            reviewed_at = program.reviewed_at
+            session.flush()
+            session.add_all(_field_evidence(record, program, reviewed_at))
+            session.add(SourceCheck(
+                source_id=record["source_id"], program_id=program.id,
+                source_url=record["source_url"], source_sha256=record["source_sha256"],
+                checked_at=_time(record["retrieved_at"]), status="unchanged",
+            ))
         session.commit()
     except Exception:
         session.rollback()

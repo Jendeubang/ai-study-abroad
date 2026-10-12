@@ -9,6 +9,13 @@ def test_empty_search_returns_seeded_programs(client):
     assert all(item["source_url"].startswith("https://example.org/") for item in data["items"])
 
 
+def test_homepage_uses_cache_busted_app_script(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "/static/app.js?v=20261012-1" in response.text
+
+
 def test_fts_search_and_country_filter(client):
     response = client.get("/api/programs", params={"q": "computer science", "country": "英国"})
 

@@ -63,14 +63,29 @@ def test_review_starts_unapproved_and_import_requires_explicit_review(client):
 
 def test_reviewed_import_is_searchable_labeled_and_idempotent(client):
     from app.services.official_import_service import import_reviewed_snapshot
+    from app.models import EvidenceFact, Program, SourceCheck
+    from sqlalchemy import select
 
     batch = snapshot()
     review = approved_review(batch)
     with client.app.state.session_factory() as session:
         first = import_reviewed_snapshot(session, batch, review)
         second = import_reviewed_snapshot(session, batch, review)
+        program = session.scalar(select(Program).where(Program.source_id == batch["records"][0]["source_id"]))
+        facts = list(session.scalars(select(EvidenceFact).where(EvidenceFact.program_id == program.id)))
+        checks = list(session.scalars(select(SourceCheck).where(SourceCheck.source_id == program.source_id)))
     assert first["imported"] == 1
     assert second["unchanged"] == 1
+    assert len(facts) == 11
+    assert {fact.field_name for fact in facts} == {
+        "academic_standard", "ielts_overall", "ielts_listening", "ielts_writing",
+        "ielts_reading", "ielts_speaking", "toefl_overall", "toefl_listening",
+        "toefl_writing", "toefl_reading", "toefl_speaking",
+    }
+    assert all(fact.source_url == batch["records"][0]["source_url"] for fact in facts)
+    assert all(fact.source_sha256 == batch["records"][0]["source_sha256"] for fact in facts)
+    assert all(fact.retrieved_at and fact.reviewed_at and fact.reviewer for fact in facts)
+    assert len(checks) == 1 and checks[0].status == "unchanged"
 
     response = client.get("/api/programs?q=Advanced%20Computer%20Science&source_type=official")
     assert response.status_code == 200
@@ -92,11 +107,30 @@ def test_reviewed_import_is_searchable_labeled_and_idempotent(client):
     assert "官网采集时间" in detail
     assert "人工核对时间" in detail
     assert "First class Honours Degree" in detail
+    assert "雅思总分" in detail and "雅思阅读" in detail and "托福总分" in detail
+    assert "Expected Academic Standard" in detail
     assert "申请截止" in detail
     assert "模拟排名" not in detail
     assert "此页全部院校" not in detail
     assert 'rel="noopener noreferrer"' in detail
     assert "官网已核对" in client.get("/").text
+
+
+def test_identical_snapshot_backfills_missing_field_evidence(client):
+    from app.models import EvidenceFact
+    from app.services.official_import_service import import_reviewed_snapshot
+    from sqlalchemy import delete, select
+
+    batch = snapshot()
+    review = approved_review(batch)
+    with client.app.state.session_factory() as session:
+        import_reviewed_snapshot(session, batch, review)
+        session.execute(delete(EvidenceFact))
+        session.commit()
+        result = import_reviewed_snapshot(session, batch, review)
+        facts = list(session.scalars(select(EvidenceFact)))
+    assert result["unchanged"] == 1
+    assert len(facts) == 11
 
 
 def test_changed_snapshot_cannot_use_old_review(client):

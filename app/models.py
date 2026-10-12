@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -94,3 +94,148 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_json: Mapped[str | None] = mapped_column(Text)
     program: Mapped[Program] = relationship(back_populates="chunks")
+
+
+class SourcePermission(Base):
+    __tablename__ = "source_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    host: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    terms_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    use_scope: Mapped[str] = mapped_column(String(50), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewer: Mapped[str] = mapped_column(String(100), nullable=False)
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class SourceDefinition(Base):
+    """An exact, reviewable official page the collector may consider."""
+
+    __tablename__ = "source_definitions"
+    __table_args__ = (Index("ix_source_definitions_host", "host"),)
+
+    source_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    programme_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    host: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
+    university: Mapped[str] = mapped_column(String(200), nullable=False)
+    country: Mapped[str] = mapped_column(String(100), nullable=False)
+    city: Mapped[str | None] = mapped_column(String(100))
+    program_name: Mapped[str] = mapped_column(String(250), nullable=False)
+    degree: Mapped[str] = mapped_column(String(50), nullable=False)
+    discipline: Mapped[str] = mapped_column(String(150), nullable=False)
+    parser_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    allowed_fields_json: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    @property
+    def allowed_fields(self) -> tuple[str, ...]:
+        return tuple(json.loads(self.allowed_fields_json))
+
+
+class EvidenceFact(Base):
+    __tablename__ = "evidence_facts"
+    __table_args__ = (Index("ix_evidence_facts_program_active", "program_id", "active"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    program_id: Mapped[int] = mapped_column(ForeignKey("programs.id"), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    value_json: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_json: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_excerpt: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewer: Mapped[str] = mapped_column(String(100), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    @property
+    def value(self) -> dict:
+        return json.loads(self.value_json)
+
+    @property
+    def scope(self) -> dict:
+        return json.loads(self.scope_json)
+
+
+class ApplicationRound(Base):
+    __tablename__ = "application_rounds"
+    __table_args__ = (Index("ix_application_rounds_program_active", "program_id", "active"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    program_id: Mapped[int] = mapped_column(ForeignKey("programs.id"), nullable=False)
+    intake: Mapped[str] = mapped_column(String(100), nullable=False)
+    round_label: Mapped[str] = mapped_column(String(100), nullable=False)
+    opens_on: Mapped[date | None] = mapped_column(Date)
+    deadline_on: Mapped[date | None] = mapped_column(Date)
+    evidence_excerpt: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewer: Mapped[str] = mapped_column(String(100), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class SourceCheck(Base):
+    __tablename__ = "source_checks"
+    __table_args__ = (Index("ix_source_checks_source_time", "source_id", "checked_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    program_id: Mapped[int | None] = mapped_column(ForeignKey("programs.id"))
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64))
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    message: Mapped[str | None] = mapped_column(String(300))
+
+
+class ReviewCandidate(Base):
+    __tablename__ = "review_candidates"
+    __table_args__ = (
+        Index("ix_review_candidates_status", "status"),
+        Index("ix_review_candidates_fingerprint", "fingerprint", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    program_id: Mapped[int] = mapped_column(ForeignKey("programs.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    field_name: Mapped[str | None] = mapped_column(String(50))
+    scope_json: Mapped[str] = mapped_column(Text, nullable=False)
+    new_value_json: Mapped[str] = mapped_column(Text, nullable=False)
+    old_value_json: Mapped[str | None] = mapped_column(Text)
+    evidence_excerpt: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewer: Mapped[str | None] = mapped_column(String(100))
+    review_note: Mapped[str | None] = mapped_column(String(500))
+
+    @property
+    def scope(self) -> dict:
+        return json.loads(self.scope_json)
+
+    @property
+    def new_value(self) -> dict:
+        return json.loads(self.new_value_json)
+
+    @property
+    def old_value(self) -> dict | None:
+        return json.loads(self.old_value_json) if self.old_value_json else None
+
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("review_candidates.id"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    reviewer: Mapped[str] = mapped_column(String(100), nullable=False)
+    note: Mapped[str] = mapped_column(String(500), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

@@ -7,6 +7,7 @@ from app.crud import get_program
 from app.database import get_db
 from app.schemas import ProgramRead
 from app.services.search_service import SearchCriteria, search_programs, validate_search_text
+from app.services.data_review_service import review_alerts
 
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -53,4 +54,5 @@ def program_detail(request: Request, db: DbSession, program_id: int):
     data = ProgramRead.model_validate(program).model_dump(mode="json")
     data["university_ranking"] = program.university_record.ranking
     data["disclaimer"] = "数据仅供参考，不保证录取；请以项目来源及官网为准。"
+    data["review_alerts"] = review_alerts(db, program)
     return {"code": 0, "message": "ok", "data": data, "request_id": request.state.request_id}

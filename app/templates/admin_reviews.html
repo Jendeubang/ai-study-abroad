@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>官网数据核对 · StudyCompass AI</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/admin_reviews.js" defer></script>
+</head>
+<body class="theme-editorial admin-body">
+  <a class="skip-link" href="#main">跳至主要内容</a>
+  <div class="app-shell">
+    <header class="site-header"><a class="brand" href="/">StudyCompass<span class="brand-ai"> AI</span></a><a class="back-link" href="/">← 返回检索</a></header>
+    <main id="main" class="admin-main">
+      <div class="admin-intro"><p class="admin-eyebrow">数据管理</p><h1>官网数据核对</h1><p>采集变化先进入待审核队列。批准后才更新检索结果。</p></div>
+      <form id="admin-login" class="admin-login">
+        <label>管理 token<input id="admin-token" type="password" autocomplete="off" required></label>
+        <button class="button button-primary" type="submit">进入审核</button>
+      </form>
+      <p id="admin-status" class="status" role="status" aria-live="polite"></p>
+      <div id="admin-content" hidden>
+        <section class="admin-section"><div class="admin-section-title"><h2>待核对变化</h2><button type="button" id="refresh-reviews" class="text-button">刷新</button></div><div id="review-list" class="admin-list"></div></section>
+        <section class="admin-section"><h2>网站使用范围</h2><p>每个网站分别登记条款链接和允许用途。本地研究不代表公开展示授权。</p><div id="source-list" class="admin-list"></div></section>
+        <section class="admin-section"><h2>登记申请轮次</h2><p>先运行官网采集，再依据最新采集页面填写轮次和证据；提交后仍需批准。</p>
+          <form id="round-form" class="admin-form admin-round-form">
+            <label>官网项目<select name="program_id" required></select></label>
+            <label>入学季<input name="intake" maxlength="100" placeholder="2027 Fall" required></label>
+            <label>轮次名称<input name="round_label" maxlength="100" placeholder="第一轮" required></label>
+            <label>开放日期<input name="opens_on" type="date"></label>
+            <label>截止日期<input name="deadline_on" type="date"></label>
+            <label class="admin-wide">官网简短证据<textarea name="evidence_excerpt" maxlength="500" minlength="8" rows="2" required></textarea></label>
+            <button class="button button-primary" type="submit">提交待审核轮次</button>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

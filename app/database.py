@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import ROOT
 from app.models import Base, Program, University
+from app.sources.catalog import seed_source_catalog
 
 
 FTS_DDL = (
@@ -57,7 +58,9 @@ def initialize_database(engine, seed_path: Path) -> None:
         if not fts_exists:
             connection.execute(text("INSERT INTO program_fts(program_fts) VALUES ('rebuild')"))
     with Session(engine) as session:
+        seed_source_catalog(session)
         if session.scalar(select(Program.id).limit(1)) is not None:
+            session.commit()
             return
         records = json.loads(seed_path.read_text(encoding="utf-8"))
         universities: dict[tuple[str, str], University] = {}

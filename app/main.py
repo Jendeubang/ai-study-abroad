@@ -18,16 +18,20 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing import Annotated
 
 from app.config import settings
 from app.crud import get_program
 from app.database import get_db, initialize_database, make_engine, make_session_factory, migrate_database
+from app.models import Program
 from app.routers.chat import build_router as build_chat_router
+from app.routers.admin import build_router as build_admin_router
 from app.routers.programs import router as programs_router
 from app.routers.recommend import build_router as build_recommend_router
 from app.services.ai_service import AIService
+from app.services.data_review_service import active_evidence, active_rounds, review_alerts
 
 
 logger = logging.getLogger("study_abroad")
@@ -87,6 +91,7 @@ def create_app(
         model=settings.ai_model,
         timeout_seconds=settings.ai_timeout_seconds,
     )
+    app.state.admin_token = settings.admin_token
     limiter = Limiter(key_func=anonymous_rate_limit_key, default_limits=["60/minute"])
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
@@ -107,6 +112,8 @@ def create_app(
             response = _error(request, 504, "请求处理超时")
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.url.path.startswith(("/api/admin/", "/admin/")):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.exception_handler(StarletteHTTPException)
@@ -132,9 +139,16 @@ def create_app(
         return {"code": 0, "message": "ok", "data": {"status": "ok"}, "request_id": request.state.request_id}
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def home(request: Request):
+    def home(request: Request, db: DbSession):
+        has_official = db.scalar(
+            select(Program.id).where(Program.data_origin == "official_reviewed").limit(1)
+        ) is not None
         return templates.TemplateResponse(
-            request, "index.html", {"style": "editorial", "initial_query": request.query_params.get("q", "")}
+            request, "index.html", {
+                "style": "editorial",
+                "initial_query": request.query_params.get("q", ""),
+                "default_source_type": "official" if has_official else "all",
+            }
         )
 
     @app.get("/preview/{style}", response_class=HTMLResponse, include_in_schema=False)
@@ -142,7 +156,11 @@ def create_app(
         if style not in {"research", "studio"}:
             raise HTTPException(status_code=404, detail="页面方案不存在")
         return templates.TemplateResponse(
-            request, "index.html", {"style": style, "initial_query": request.query_params.get("q", "")}
+            request, "index.html", {
+                "style": style,
+                "initial_query": request.query_params.get("q", ""),
+                "default_source_type": "all",
+            }
         )
 
     @app.get("/programs/{program_id}", response_class=HTMLResponse, include_in_schema=False)
@@ -162,12 +180,21 @@ def create_app(
                 "style": style,
                 "deadline_expired": program.deadline is not None and program.deadline < date.today(),
                 "data_stale": datetime.now(timezone.utc) - updated > timedelta(days=180),
+                "evidence": active_evidence(db, program.id),
+                "rounds": active_rounds(db, program.id),
+                "review_alerts": review_alerts(db, program),
+                "today": date.today(),
             }
         )
+
+    @app.get("/admin/reviews", response_class=HTMLResponse, include_in_schema=False)
+    def admin_reviews(request: Request):
+        return templates.TemplateResponse(request, "admin_reviews.html", {})
 
     app.include_router(programs_router)
     app.include_router(build_recommend_router(limiter))
     app.include_router(build_chat_router(limiter))
+    app.include_router(build_admin_router(limiter))
     return app
 
 
